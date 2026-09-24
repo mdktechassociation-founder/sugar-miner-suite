@@ -53,7 +53,7 @@ class SugarBootReceiver : BroadcastReceiver() {
         }.start()
     }
 
-    private fun resumeIfStillAllowed(context: Context, action: String) {
+    private fun resumeIfStillAllowed(context: Context, trigger: String) {
         val prefs = context.getSharedPreferences(SugarMiningService.PREF_FILE, Context.MODE_PRIVATE)
 
         // ---- the user's decision, checked before anything else --------------
@@ -77,11 +77,12 @@ class SugarBootReceiver : BroadcastReceiver() {
             ContextCompat.startForegroundService(
                 context,
                 Intent(context, SugarMiningService::class.java).apply {
-                    action = SugarMiningService.ACTION_START
+                    // `this.action` — the Intent's action, not the trigger parameter
+                    this.action = SugarMiningService.ACTION_START
                     putExtra(SugarMiningService.EXTRA_TITLE, "Mining")
                     putExtra(
                         SugarMiningService.EXTRA_TEXT,
-                        if (action == ACTION_RE_ARM) "resuming…" else "resuming after restart…"
+                        if (trigger == ACTION_RE_ARM) "resuming…" else "resuming after restart…"
                     )
                 }
             )
