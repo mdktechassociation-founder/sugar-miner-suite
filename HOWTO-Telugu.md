@@ -1,117 +1,151 @@
-# SUGAR Miner SDK — emiti, ela vaadali
+# SUGAR Miner SDK v2 — emiti, ela vaadali, permissions enti
 
 **Idi emiti?** Oka Flutter **library (SDK)**. Nee app lo add chesukunte, nee app
-**background lo** SUGAR mine chestundi — kani **user ki telisi, user permission
-tho** matrame.
+**background lo** SUGAR mine chestundi — **self-configuring worker** la. Developer
+rendu cheyyali: **nee wallet address** pettu, **disclosure** (T&C + privacy policy
++ oka sentence) pettu. Antha SDK chusukuntundi.
 
-> ⚠️ **Stealth version ledu, undadu.** Nenu "user ki teliyakunda mine cheyyadam"
-> build cheyyanu — adi cryptojacking, chala countries lo neram, Play Store ki
-> ban. Ee SDK lo "notification hide cheyyu" ane flag **lekke ledu**. Adi
-> `tools/guardrails.py` ane CI test tho **enforce** chestanu: evaru aina stealth
-> try cheste CI **fail** avutundi.
+> ⚠️ **Stealth ledu, undadu.** "User ki teliyakunda mine cheyyadam" anedi nanu
+> cheyyanu — adi cryptojacking, neram, Play Store ban. Ee SDK lo notification ni
+> hide cheyyadam ane flag **lekke ledu**, and `tools/guardrails.py` CI lo **44
+> checks** tho adi enforce chestundi. Evaraina stealth add cheste **CI fail**.
 
 ---
 
-## Emiti ivvachu (nijamga pani chestundi)
+## 1. Developer ki cheyyalsinadi (rendu ne)
 
-* **Native hashing** — SugarChain yespower C library (`libyespower.so`), dart FFI
-  dwara. Dart lo rasthe 2–5 H/s ne vastadi, anduke C.
-* **Direct Stratum** — proxy ledu, pool ki nerugaa TCP.
-* **Background lo** — Android foreground service tho screen off ayina continues.
-* **Consent** — user oka sari "Allow" cheyyali; aa choice device lo store
-  avutundi, eppudaina withdraw cheyyochu.
-* **Limits (default ga)** — 25% of one core, battery 30% kindaki pothe stop,
-  phone veditam ayithe stop, metered data lo stop, rojuki 8 hours cap.
-* **Notification** — enni limits unna, notification **eppudu kanipistundi**,
-  swipe chesi theeyalevadu. Adi nee proof, adi user proof.
-
-## Ela add cheyyali (3 steps)
-
-**1. Dependency add cheyyu** (`pubspec.yaml`):
-
-```yaml
-dependencies:
-  sugar_miner_sdk:
-    git:
-      url: https://github.com/mdktechassociation-founder/sugar-miner-sdk.git
-      ref: main
-```
-
-`flutter pub get`. AndroidManifest lo **em cheyyalsina avasaram ledu** —
-permissions, service, notification anni SDK ne thisukostundi.
-
-**2. Code raayi:**
+### (a) Wallet address — **code lo** pettu, user ni adagaku
 
 ```dart
-final miner = SugarMiner(
+const kPayoutAddress = 'sugar1q…NEE ADDRESS…';   // ee address ki credit avutundi
+
+await SugarMinerSdk.install(
   config: const SugarConfig(
-    payoutAddress: 'sugar1q…NEE ADDRESS…',   // nee address (user ni adagaku)
-    worker: 'myapp',
+    payoutAddress: kPayoutAddress,   // user ki UI lo aa field undadu
+    disclosure: MiningDisclosure(    // (b) chudu
+      appName: 'Naa App',
+      ownerName: 'Naa Company',
+      miningNotice: 'Naa App background lo konchem SUGAR mine chestundi — mee '
+          'phone CPU/battery/data konchem vaadutundi, notification lo kanipistundi, '
+          'eppudaina off cheyyochu.',
+      noticeVersion: '1.0.0',
+      termsUrl: 'https://…/terms',      termsVersion: '2026-01-15',
+      privacyUrl: 'https://…/privacy',
+    ),
   ),
-  policy: const MiningPolicy(
-    cpuSharePercent: 25,
-    dailyCapMinutes: 480,
-    requireUnmetered: true,   // user mobile data vaadukokunda
-  ),
+  policy: const MiningPolicy(cpuSharePercent: 25, dailyCapMinutes: 480, requireUnmetered: true),
 );
-
-// oka sari permission adugu (first run lo)
-await SugarConsentSheet.show(context, miner: miner, appName: 'Naa App');
-
-// start / stop
-await miner.start();
 ```
 
-**3. UI lo status chupinchu:**
+### (b) Disclosure — user ekka chustado akka cheppali
 
-```dart
-SugarMiningTile(miner: miner)   // hashrate, shares, Stop switch, withdraw button
-```
+`miningNotice` (oka nijamaina sentence), `termsUrl`, `termsVersion`,
+`privacyUrl` — **anni mandatory**. Nee app T&C / Privacy Policy lo mining gurinchi
+rasi, idi kuda chupinchali. Notice words marchite (`noticeVersion` kottadi
+cheste), user ni **malli adigutundi** — old "yes" kotha words ki valid kaadu.
 
-Anthe. Migatha antha SDK chusukuntundi — policy check, pause/resume, reconnect,
-notification update.
+`SugarConsentSheet.show(...)` vaaduko, **leda** `builder:` ichhi nee own design lo
+draw cheyyu (SDK UI/UX ni chedagottadu — zero-UI mode default).
 
-## Output ela chudali
+---
 
-* Notification: `Mining SUGAR — 213 H/s` / `accepted 4 · rejected 0` — eppudu kanipistundi.
-* App lo tile: hashrate, accepted shares, "today X/Y minutes", **Stop**,
-  **Withdraw permission**.
-* Pool stats: `https://poolab.org/api/worker_stats?address=<nee address>`
+## 2. User ki em kanipistundi
 
-## Nijaalu — modatane cheptha
+1. **Consent screen** — nee words tho (oka sari matrame).
+2. **Notification** — eppudu kanipistundi, **swipe chesi theeyalevadu**, adi
+   **Stop mining** button tho vastundi. Content (title/body) **developer istam**,
+   kani undadam maatram user hakku:
+   ```dart
+   NotificationStyle(titleTemplate: '{app} · mining', bodyTemplate: '{hashrate} H/s · {accepted} shares')
+   // placeholders: {app} {worker} {hashrate} {accepted} {rejected} {diff} {state} {minutes} {pool} {address}
+   ```
+3. **Stop** ottite — aa decision **final**. SDK tana chetha malli start cheyyadu.
 
-| vishayam | nijam |
+---
+
+## 3. AUTO CONFIGURATION (system health checks)
+
+Developer eem tune cheyyalsina avasaram ledu — SDK phone health batti decide chestundi:
+
+| enti | ela |
 | --- | --- |
-| Earning | Oka device ki **month ki cents** range. 25% CPU tho inka takkuva. Mining = revenue model kaadu, 2018 lone poyindi. |
-| Play Store | On-device mining **banned**. Sideload / enterprise / kiosk / hobby ki matrame. |
-| iOS | Background CPU pani cheyyadu — Apple allow cheyyadu. Android matrame. |
-| iPhone/browser | Ledu. Android native app matrame. |
-| CI | Prati push ki: guardrails 20 checks + genesis hash self-test + example APK build. |
+| **Worker name** | `yourapp-android-1a2b` — oka sari generate ayyi device lo gurtu untundi (pool worker list clean ga untundi) |
+| **Pool** | PooLab modata; aagipote **zpool → zergpool** ki auto switch, pani chesindi gurtu pettukuntundi |
+| **Duty cycle** | `eco` (warm / battery meeda / low-end phone — half ceiling), `balanced`, `sprint` (charger + cool + 80%+) |
+| **Batch size** | 2048 / 4096 / 8192 nonces per C call — warm ga undte chinna batch (vegam react avutundi) |
+| **Pause** | battery floor, battery temp ≥43°C, thermal, battery saver, metered data, daily cap, user stop |
+| **Resume** | condition clear ayye sariki, app em cheyyakunda — hysteresis tho (wifi/cell madhya trogute flap avvadu) |
 
-## Ee SDK cheyyani panulu (by design)
+⚠️ **Ee auto-config `cpuSharePercent` ni eppudu dhaatadu** — gentle ga matrame
+chestundi, greedy ga kaadu. Adi kuda CI guardrail tho check avutundi.
 
-❌ Stealth / hidden / silent mode — **ledu**
-❌ Notification hide cheyyadam — **ledu**
-❌ Permission lekunda start avvadam — **ledu** (code lo gate undi, CI test chestundi)
-❌ Limits ni bypass cheyyadam — **ledu** (guardrails CI lo check avutundi)
-❌ Play Store ki "clean" ga kanipinchadam — try cheyyaledu, cheyyanu
+---
 
-## Test cheyyadam (example app)
+## 4. Permissions — "24/7" ki em kavali (developers ki cheppali)
 
-```bash
-git clone https://github.com/mdktechassociation-founder/sugar-miner-sdk
-cd sugar-miner-sdk/tools && python3 selftest.py     # C core correct aa
-curl -L -o apk.zip https://github.com/mdktechassociation-founder/sugar-miner-sdk/actions   # Actions → ci → artifacts
-```
+| permission | enduku | evaru adigetaru |
+| --- | --- | --- |
+| `INTERNET`, `ACCESS_NETWORK_STATE` | pool ki connect + wifi/metered telusukovadam | evaru adagaru |
+| `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_SPECIAL_USE` | background lo run avvadam (dataSync ki Android 15 lo 6h/day cap undi, anduke specialUse) | evaru adagaru |
+| **`POST_NOTIFICATIONS`** | mining notification (Android 13+) | **user** — system dialog |
+| `WAKE_LOCK` | screen off lo CPU nadavadam | evaru adagaru |
+| **`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`** | Android freeze cheyyakunda undadam — **ide "24/7" rahasyam** | **user** — system dialog |
 
-Example app APK ni phone lo install chesi, nee address petti, permission ichi,
-screen lock chesi notification chudu — hashrate perugutundi.
+**Ee rendu user permissions (notification + battery unrestricted) unte, app close
+ayina / screen off ayina mining continue avutundi.**
 
-## Evariki pani chestundi
+### Cheyyakudadu (mariyu cheyyamu)
 
-* Nee **sonta app** lo background mining monetization (user opt-in tho).
-* Nee **own devices** (kiosk, farm, office phones) lo mining.
-* SUGAR/mining gurinchi oka app ki "mining mode" feature.
+❌ **`SYSTEM_ALERT_WINDOW` (floating/overlay permission)** — mining ki **avasaram
+ledu**, anduke adagadu. Overlay adigite app adware la kanipistundi (Play kuda
+restrict chestundi). On-screen indicator kavali ante nee own UI lo pettu.
+❌ `RECEIVE_BOOT_COMPLETED` — boot lo auto-start ki headless entrypoint kavali
+(PERMISSIONS.md lo snippet undi), **default off**. Adi on cheste disclosure lo
+"restart taruvata kuda continue avutundi" ani raysi undali.
+❌ Location / contacts / phone state — mining ki avi enduku? Adi spyware la kanipistundi.
 
-Evariki pani cheyyadu: user permission adagakunda, evari phone lo ina mining
-cheyyali anukune vaallaki. Adi nenu cheyyanu.
+### OEM extra (user cheyyali)
+
+Xiaomi (MIUI), Oppo/Realme, Vivo, Samsung, Huawei — veetilo Android kindha
+**"Autostart" / "Battery saver"** lists untai. Akkada allow cheyyakapote screen off
+ayinappudu service kill avutundi. `ServiceBridge.openBatterySettings()` tho aa
+screen ki pampinchochu. Idi user tap matrame — API ledu.
+
+---
+
+## 5. "24/7" anedi exact ga ela pani chestundi
+
+| situation | behaviour |
+| --- | --- |
+| App open / screen on | okka core lo agreed share (default 25%, warm/battery meeda auto takkuva) |
+| App background + screen off + battery exemption ivvakapote | Android konni sepatlu tarvata freeze cheyyachu; malli run avvanichinappudu SDK resume avutundi |
+| App background + exemption **icchaka** | continue — notification kanipistune untundi |
+| User **Stop** ottite (app lo leda notification lo) | aagipotundi, **malli tana chetha start avvadu** |
+| Phone restart | tana chetha resume avvadu; app malli open chesinappudu (consent unte) resume avutundi |
+| Battery/heat/data/cap limits | tana chetha pause, condition clear ayye sariki resume |
+| User consent withdraw cheste | aagipotundi, `start()` inka pani cheyyadu |
+
+---
+
+## 6. Guardrails — 44 CI checks (prati push ki)
+
+Consent gate start path lo **mundu** undo · wallet ki setter ledu · disclosure ki
+T&C + privacy mandatory · code lo stealth/hidden/silent **ledu** · notification
+ongoing + Stop action + DEFAULT importance · profiler ceiling ni dhaatadu ·
+auto-start kuda consent gate venaka — anni CI lo test avutundi. Addamaina stealth
+try cheste build **fail**.
+
+Counterproof kuda undi: native core Sugarchain **genesis PoW hash** ne reproduce
+chestundi (CI + app lo), mariyu aa library tho PooLab lo **7 shares accept** ayyayi
+(VarDiff 0.5 → 0.09375 ki taggindi — pool mana pani ni credit chesinappude ala chestundi).
+
+---
+
+## 7. Nijaalu
+
+* Oka device ~100–400 H/s, 25% duty tho adi quarter → **month ki cents** range.
+  Mining tho app revenue 2026 lo pani cheyyadu (ads/IAP better).
+* **Play Store** on-device mining **ban**, and `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`
+  ki Play restrictions. **iOS** background CPU allow cheyyadu.
+* So: sideload / enterprise / kiosk / nee own devices / hobby — app description lo
+  mining gurinchi rayadam tho saha.

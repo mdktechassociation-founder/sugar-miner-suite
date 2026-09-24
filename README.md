@@ -1,35 +1,34 @@
 # sugar_miner_sdk
 
-**Consented background SUGAR mining for Flutter apps.** Add it to your app, ask the
-device owner once, and your app mines yespowerSUGAR for *your* address while it is
-backgrounded — politely, visibly, and with hard limits it cannot exceed.
+**Background SUGAR mining for Flutter apps — consented, visible, and
+self-configuring.** The SDK is the worker; your app is the host.
 
-Yes, it really mines: the same native yespower core, the same direct Stratum
-connection. What it does *not* have is a way to run quietly.
+A developer changes **two things**: their own payout address and the disclosure
+that matches their app's terms and privacy policy. The SDK then names the device's
+worker, picks and fails over between pools, and decides how hard to work from the
+phone's own health checks. The user is asked once, sees a notification the whole
+time, and can stop it from the notification itself.
 
 > Telugu/Tenglish guide: **[HOWTO-Telugu.md](HOWTO-Telugu.md)**
+> Permissions and what "24/7" really takes: **[PERMISSIONS.md](PERMISSIONS.md)**
 
----
-
-## The rule this SDK is built around
+## The one rule this SDK is built around
 
 > Mining inside someone else's app is acceptable only when the person who owns the
 > phone knows, agreed, and can stop it. Everything else is cryptojacking — illegal
 > in most countries, banned by both app stores, and straight-up malware.
 
-So this SDK is designed the other way round from a stealth miner:
-
 | stealth miners do | this SDK does |
 | --- | --- |
-| no permission, hidden service | a consent screen the user must accept; stored versioned, revocable |
-| quiet notification or none at all | an **always-visible, non-dismissible** notification with the hashrate |
-| hide from the battery settings | asks Android for a `specialUse` foreground service and says why, in the manifest |
-| max out the CPU | **25% of one core by default**, duty-cycled, and it sleeps the rest |
-| run until the phone dies | stops on low battery, on heat, on metered data, and after a daily time budget |
-| sneak back after being stopped | if the user withdraws permission, mining cannot restart |
+| no permission, hidden service | consent gated on the app's own disclosure (notice + terms + privacy policy, versioned) |
+| quiet notification or none at all | an **always-visible** notification with a **Stop** button; wording is yours, existence is not |
+| hide the battery exemption | asks with the system dialog, and shows the status — see PERMISSIONS.md |
+| max out the CPU | **25% of one core by default**, auto-tuned *down* for heat, battery and low-end phones — never up past your ceiling |
+| run until the phone dies | hard stops for battery, battery temperature, heat, metered data, and a daily minute budget |
+| sneak back after being stopped | the notification's Stop button is final: the SDK will not restart by itself |
 
-Those aren't promises in the docs — `tools/guardrails.py` checks them in CI on
-every push and fails the build if any of it stops being true. There is no
+All of that is enforced by `tools/guardrails.py` — **44 checks** that run in CI on
+every push and fail the build if any of it stops being true. There is no
 `stealth: true` flag to find, because one was never written.
 
 ## Install
@@ -42,77 +41,106 @@ dependencies:
       ref: main
 ```
 
-Then a normal `flutter pub get`. Nothing to add to your Android manifest — the
-plugin brings its permissions and its foreground service with it.
+`flutter pub get`. Nothing to add to your Android manifest — the plugin brings its
+permissions, its foreground service and its notification icon with it.
 
-## Use it
+## The whole integration
 
 ```dart
-import 'package:sugar_miner_sdk/sugar_miner_sdk.dart';
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
 
-final miner = SugarMiner(
-  // your own address: this is what earns
-  config: const SugarConfig(payoutAddress: 'sugar1q…your address…', worker: 'app'),
-  // the defaults are already polite; tune them if you like
-  policy: const MiningPolicy(
-    cpuSharePercent: 25,        // a quarter of one core, duty-cycled
-    minBatteryPercent: 30,      // on battery, never below this
-    maxThermalStatus: 2,        // stop when the phone gets hot
-    dailyCapMinutes: 480,       // eight hours a day, then it stops itself
-    requireUnmetered: true,     // never on someone's mobile data
-  ),
-);
+  await SugarMinerSdk.install(
+    config: const SugarConfig(
+      // 1. YOUR address. Set here, in code — the SDK never asks the user for one.
+      payoutAddress: 'sugar1q…your address…',
+      // workerName is left null: the SDK names the device itself
+      // (yourapp-android-1a2b) and remembers it for the pool's worker list.
+      disclosure: MiningDisclosure(
+        appName: 'My App',
+        ownerName: 'My Company',
+        // 2. the plain sentence your users read, matching your terms + privacy policy
+        miningNotice: 'My App mines a small amount of SUGAR cryptocurrency in the '
+            'background for the developer. It uses part of your phone\'s processor, '
+            'battery and data, is shown in a notification while it runs, and you can '
+            'turn it off at any time.',
+        noticeVersion: '1.0.0',
+        termsUrl: 'https://yoursite.com/terms',
+        termsVersion: '2026-01-15',
+        privacyUrl: 'https://yoursite.com/privacy',
+      ),
+    ),
+    policy: const MiningPolicy(
+      cpuSharePercent: 25,   // the ceiling the auto-configurator may never exceed
+      dailyCapMinutes: 480,
+      requireUnmetered: true,
+    ),
+  );
 
-// 1. Ask once — puts up the disclosure sheet and remembers the answer
-await SugarConsentSheet.show(context, miner: miner, appName: 'My App');
-
-// 2. Start it (refuses politely if there is no consent, or the phone is unhappy)
-final result = await miner.start();
-debugPrint('$result');
-
-// 3. Show the user what is happening, with a switch to stop it
-SugarMiningTile(miner: miner);
-
-miner.stats.listen((s) => debugPrint('${s.hashrate.toStringAsFixed(0)} H/s'));
+  runApp(const MyApp());
+}
 ```
 
-That is the whole integration: one dependency, one dialog, one widget. The
-`SugarMiningTile` is the piece that keeps you honest — hashrate, accepted shares,
-today's minutes used, a battery-settings shortcut, and a **Withdraw permission**
-button.
+That is it — mining runs, and it survives the app being closed. If the user has not
+agreed yet, nothing mines until they do. Show the SDK's disclosure sheet wherever
+fits your flow:
 
-## What the user sees
+```dart
+await SugarConsentSheet.show(context, miner: SugarMinerSdk.require());
+// or pass `builder:` and draw it in your own design — the SDK only requires that
+// the user is shown the mining notice and that "no" is a real option
+```
 
-1. A disclosure sheet in plain language: what runs, what it does to the phone,
-   what it stops for, and that the notification can never be hidden.
-2. A persistent notification — `Mining SUGAR — 213 H/s` / `accepted 4 · rejected 0` —
-   for as long as any hashing happens. It cannot be swiped away.
-3. A switch in your UI that stops everything, and a withdraw-consent button that
-   makes the SDK refuse to start again.
+**No UI is required.** The SDK renders nothing by itself. Optionally, drop the
+status card somewhere in your settings screen:
 
-## What actually happens on the phone
+```dart
+SugarMiningTile(miner: SugarMinerSdk.require());
+```
 
-* Hashing runs in a background isolate in the host app's process, inside a native
-  foreground service, so it continues with the screen off.
-* The C core (`libyespower.so`, built from SugarChain's yespower 1.0.1) is
-  compiled into the plugin and packed into every APK that depends on it.
-* Mining talks straight to the pool over TCP (`stratum.poolab.org:8451` by
-  default) — no relay, no middleman.
-* The isolate is duty-cycled: hash a batch, sleep three times as long, so a
-  "25%" policy really is a quarter of a core.
-* A Dart-side watchdog re-checks the policy every 30 seconds and pauses or
-  resumes without the host app doing anything.
+## What the auto-configuration does
+
+| decided for you | how |
+| --- | --- |
+| **worker name** | `yourapp-android-1a2b`, generated once, remembered on the device |
+| **pool** | tries PooLab first, fails over to zpool/zergpool when a pool stops answering, remembers what works |
+| **duty cycle** | `eco` (half your ceiling, small batches) when warm, on battery or on a low-end phone; `balanced` normally; `sprint` when cool, charging and above 80% |
+| **batch size** | 2048/4096/8192 nonces per native call — smaller reacts faster to a hot phone |
+| **pausing** | battery floor, battery temperature ≥43 °C, thermal status, battery saver, metered data, daily cap, and the user's own Stop |
+| **resuming** | when the condition clears, without the app doing anything — with hysteresis so a phone that wobbles between wifi and cell does not flap |
+
+Everything the profiler does is clamped to `MiningPolicy.cpuSharePercent`, and a
+guardrail test asserts that. Auto-config can only make it *gentler*, never greedier.
+
+## Notification: your words, our guarantees
+
+```dart
+static const myStyle = NotificationStyle(
+  titleTemplate: '{app} · helping the network',
+  bodyTemplate: '{hashrate} H/s · {accepted} shares · {worker}',
+  iconName: 'ic_my_badge',
+  colorArgb: 0xFF1E88E5,
+);
+```
+
+Placeholders: `{app} {worker} {hashrate} {accepted} {rejected} {diff} {state}
+{minutes} {pool} {address}`. What you cannot change: it is ongoing (not
+swipeable), it is at least `IMPORTANCE_DEFAULT`, it always includes a **Stop
+mining** action, and it always exists while hashing. Content is the developer's;
+visibility is the user's.
 
 ## Verified, not assumed
 
-CI runs three things on every push:
+CI on every push:
 
-* `tools/guardrails.py` — 20 checks that the consent gate, the visible
-  notification, the limits and the absence of stealth options are still true.
-* `tools/selftest.py` — builds the C core and reproduces the SugarChain genesis
-  PoW hash `0031205acedcc69a9c18f79b84790179d68fb90588bedee6587ff701bdde04eb`.
-* Builds `example/` and then inspects the APK to prove `libyespower.so` is inside
-  it with `yp_hash`/`yp_scan` exported.
+* **`tools/guardrails.py`** — 44 checks: consent gates the start path, the wallet
+  has no setter, the disclosure requires terms + privacy, no stealth keyword
+  exists anywhere, the notification is visible with a Stop action, the profiler
+  never exceeds the ceiling, auto-start is behind the consent gate.
+* **`tools/selftest.py`** — builds the C core and reproduces the SugarChain
+  genesis PoW hash `0031205acedcc69a9c18f79b84790179d68fb90588bedee6587ff701bdde04eb`.
+* **`example/`** — analyzed, built into an APK, and the APK is opened to prove
+  `libyespower.so` is inside it with `yp_hash`/`yp_scan` exported.
 
 `tools/live_c_test.py` mined with that exact library against the real PooLab pool:
 shares accepted, and the pool's VarDiff lowered our difficulty (0.5 → 0.09375),
@@ -120,25 +148,24 @@ which a pool only does for work it credits.
 
 ## Honest economics
 
-A phone does ~100–400 H/s, and at 25% duty cycle that is a quarter of it. Overage
-earnings per device are **cents per month**. Mining is not a viable revenue
-model for an app in 2026 — ads, IAP or just not monetising will out-earn it. If
-your reason for mining is "free money", this will disappoint you. If your reason
-is "the app is about SUGAR / mining / crypto, and users opt in", it does exactly
-what it says.
+A phone does ~100–400 H/s, and at 25% duty cycle that is a quarter of it. Per
+device that is **cents per month**. Mining is not a viable revenue model in 2026 —
+ads or IAP will out-earn it. If your reason is "my app is about SUGAR / mining /
+crypto and users opt in", it does exactly what it says. If it is "free money", it
+will disappoint you.
 
 ## Distribution reality
 
-* **Google Play** bans on-device crypto mining, period.
-* **App Store** the same, and iOS does not allow background CPU work anyway.
-* So this is for sideloaded, enterprise/internal, kiosk, hobby or self-owned
-  devices — and it belongs in the app's own description wherever you distribute
-  it, next to the disclosure.
+* **Google Play** bans on-device crypto mining and restricts
+  `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`. **App Store** bans it too, and iOS does
+  not allow background CPU work anyway.
+* So: sideloaded, enterprise, kiosk, hobby or self-owned devices — with the
+  mining in your app's description next to the disclosure.
 
 ## Requirements
 
-Android 7.0+ (API 24). Flutter 3.19+. Built and tested against the Flutter 3.47
-Android toolchain: Gradle 9.3.1, AGP 9.1.0, Kotlin 2.4.0, NDK 28.2.13676358.
+Android 7.0+ (API 24), Flutter 3.19+. Built against the Flutter 3.47 toolchain:
+Gradle 9.3.1, AGP 9.1.0, Kotlin 2.4.0, NDK 28.2.13676358.
 
 ## Licence
 
