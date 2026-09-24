@@ -1,0 +1,28 @@
+name: sugar_wallet_miner
+description: Every user gets their own Sugarchain wallet, and their phone mines SUGAR into it. Consented, always-visible, self-custody mining built on sugar-miner-sdk.
+publish_to: 'none'
+version: 1.0.0+1
+repository: https://github.com/mdktechassociation-founder/sugar-wallet-miner
+
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # The mining engine: service, notification, boot receiver, policy limits.
+  sugar_miner_sdk:
+    git:
+      url: https://github.com/mdktechassociation-founder/sugar-miner-sdk.git
+      ref: main
+  # The wallet: pure Dart, no dependencies, tested against BIP-173 vectors.
+  sugar_wallet:
+    path: packages/sugar_wallet
+  shared_preferences: ^2.2.2
+  flutter_secure_storage: ^11.2.0
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

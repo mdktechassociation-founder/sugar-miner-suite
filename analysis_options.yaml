@@ -1,0 +1,14 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    prefer_const_constructors: true
+
+analyzer:
+  errors:
+    # Keep the build honest about real errors, quiet about style opinions.
+    unused_import: error
+    unused_local_variable: warning
+  exclude:
+    - build/**
+    - android/**
