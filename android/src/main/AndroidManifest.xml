@@ -37,10 +37,11 @@
                 android:value="Consented CPU mining (yespowerSUGAR) for this app's developer, run only with the device owner's permission and always shown in a notification." />
         </service>
 
-        <!-- Resume after a reboot or an app update -- but only for a user who
-             agreed and has not said stop. Not exported, and not direct-boot
-             aware: at locked-boot time the user's consent is unreadable, and
-             mining without reading it is exactly what this SDK refuses to do. -->
+        <!-- Resume after a reboot or an app update, but only for a user who
+             agreed and has not said stop. Not exported, and note the absence of
+             directBootAware: at locked-boot time the user's consent is
+             unreadable, and mining without reading it is exactly what this SDK
+             refuses to do. -->
         <receiver
             android:name="com.mdk.sugarminer.sdk.SugarBootReceiver"
             android:exported="false"

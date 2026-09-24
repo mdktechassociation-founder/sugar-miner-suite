@@ -9,9 +9,11 @@ test is worth something.
 
     python3 tools/guardrails.py
 """
+import glob
 import os
 import re
 import sys
+import xml.dom.minidom
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG = os.path.abspath(os.path.join(HERE, '..'))
@@ -193,6 +195,15 @@ def main():
           all(k in bridge for k in ['deviceState', 'isIgnoringBatteryOptimizations']))
     check('the battery-exemption flow asks the user rather than assuming',
           'requestIgnoreBatteryOptimizations' in bridge)
+
+    # ── 9b. every manifest must actually parse (a bad comment costs 3 minutes) ─
+    broken = []
+    for f in sorted(set(glob.glob(os.path.join(PKG, '**/*.xml'), recursive=True))):
+        try:
+            xml.dom.minidom.parse(f)
+        except Exception as e:  # noqa: BLE001
+            broken.append(f'{os.path.relpath(f, PKG)}: {e}')
+    check('every XML file parses', not broken, '; '.join(broken))
 
     # ── 10. restarting the phone must never restart mining behind the user ──
     boot = code('android/src/main/kotlin/com/mdk/sugarminer/sdk/SugarBootReceiver.kt')
