@@ -34,6 +34,7 @@ import 'src/miner/engine.dart';
 import 'src/miner_isolate.dart';
 import 'src/miner_api.dart';
 import 'src/notification_style.dart';
+import 'src/pool_endpoints.dart';
 import 'src/policy.dart';
 import 'src/service_bridge.dart';
 import 'src/sugar_config.dart';
@@ -166,7 +167,7 @@ class SugarMiner implements SugarMinerApi {
       // The notification stays up so the user sees the miner waiting, but no
       // hashing happens until the phone qualifies.
       _armWatchdog(engine, startWhenAllowed: true);
-      return MinerStartResult(false, decision.pauseReason ?? 'paused');
+      return MinerStartResult(false, profile.pauseReason ?? 'paused');
     }
 
     return _spinUp(profile.dutyShare, profile.batch);

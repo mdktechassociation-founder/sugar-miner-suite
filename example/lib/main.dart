@@ -23,7 +23,6 @@ const kPayoutAddress = String.fromEnvironment(
 
 final kConfig = SugarConfig(
   payoutAddress: kPayoutAddress,
-  appName: 'Sweet Widgets',
   // Worker name is left null on purpose: the SDK names the device itself
   // (sweetwidgets-android-1a2b) and remembers it, so the owner's pool worker
   // list is readable with zero configuration.
