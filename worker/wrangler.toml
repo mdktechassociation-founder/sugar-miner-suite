@@ -1,0 +1,9 @@
+name = "sugar-bridge"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# Optional: uncomment to lock the bridge to your own pages.
+# [vars]
+# ALLOWED_ORIGINS = "https://your-site.example,http://localhost:8080"
+# POOL_HOST = "stratum.poolab.org"
+# POOL_PORT = "8451"

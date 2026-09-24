@@ -1,0 +1,57 @@
+name: pages
+
+# Publishes site/ to GitHub Pages so the miner has a real https:// URL.
+# One-time setup: Settings -> Pages -> Build and deployment -> Source: GitHub Actions.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'tools/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # never publish a page that fails the consensus checks
+      - name: Verify before publishing
+        run: node tools/verify.js
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
