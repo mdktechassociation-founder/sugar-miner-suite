@@ -7,7 +7,7 @@ rendu cheyyali: **nee wallet address** pettu, **disclosure** (T&C + privacy poli
 
 > ⚠️ **Stealth ledu, undadu.** "User ki teliyakunda mine cheyyadam" anedi nanu
 > cheyyanu — adi cryptojacking, neram, Play Store ban. Ee SDK lo notification ni
-> hide cheyyadam ane flag **lekke ledu**, and `tools/guardrails.py` CI lo **44
+> hide cheyyadam ane flag **lekke ledu**, and `tools/guardrails.py` CI lo **46
 > checks** tho adi enforce chestundi. Evaraina stealth add cheste **CI fail**.
 
 ---
@@ -211,12 +211,17 @@ alarm kuda cancel avutundi.
 cheppu — `SugarMinerSdk.restartBehaviour()` ee device ki asalu em jarugutundo sentence
 ga istundi, adi nee UI lo chupinchu.
 
-## 6. Guardrails — 63 CI checks (prati push ki)
+## 6. Guardrails — 46 CI checks (prati push ki)
 
-Consent gate start path lo **mundu** undo (boot receiver lo kuda!) · default
-notification wording lo **hashrate/pool/share lekunda** · channel branding developer
-di · importance/ongoing/silent ki **eh API ledu** · consent screen lo wallet string
-lekunda · wallet ki setter ledu · disclosure ki
+CI lo unnave: consent gate start path lo **mundu** undo (boot receiver lo kuda!) ·
+user "stop" ni SDK tana chetha undo cheyyaledu · reboot tarvata consent+stop+notification
+moodu check avutai · notification ke **silence/hide/delay API ledu** (importance DEFAULT
+fixed, ongoing fixed, Stop fixed) · consent screen lo wallet string lekunda · agreed
+CPU ceiling ni auto-config daatadu.
+
+Ippudu **rendu files** unnayi: `tools/guardrails.py` (46 — CI lo, idi maatrame build ni
+aapestundi) mariyu `tools/checks_optional.py` (15 — wording/branding/XML hygiene, CI lo
+ledu, ishtam unte run cheyyu, leda aa file ni delete cheyyu). · wallet ki setter ledu · disclosure ki
 T&C + privacy mandatory · code lo stealth/hidden/silent **ledu** · notification
 ongoing + Stop action + DEFAULT importance · profiler ceiling ni dhaatadu ·
 auto-start kuda consent gate venaka — anni CI lo test avutundi. Addamaina stealth

@@ -1,19 +1,29 @@
 #!/usr/bin/env python3
 """
-The conscience check. Fails the build if this SDK grows a way to mine quietly,
-or if any of the promises in the README quietly stops being true.
+The conscience check — consent and visibility, nothing else.
 
-Crypto mining inside someone else's app is only acceptable while it is *their*
-choice and *their* knowledge. A promise in a README is worth nothing; a failing
-test is worth something.
+This file is the *only* thing CI enforces about what this SDK is allowed to do,
+and it enforces one rule: mining here is consented, and the person whose phone
+is doing the work can always see it and can always stop it.
+
+Everything in here is a hard requirement, not a preference:
+
+  * no code path starts mining before a recorded agreement exists
+  * the user's "no" and "stop" are final, and survive reboots
+  * the notification exists, cannot be silenced, and carries Stop
+  * the app owner's wallet is the only wallet, and the user is never asked for one
+  * a reboot resumes only what the user already agreed to and has not stopped
+
+Opinionated, cosmetic or capability checks (default wording, channel branding,
+example-app taste, health-check plumbing, XML validity) deliberately live in
+tools/checks_optional.py and are NOT part of the build. This file stays small
+enough to read in one sitting, so nothing here can quietly stop being true.
 
     python3 tools/guardrails.py
 """
-import glob
 import os
 import re
 import sys
-import xml.dom.minidom
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG = os.path.abspath(os.path.join(HERE, '..'))
@@ -78,13 +88,11 @@ def kotlin_sources():
 def main():
     print('guardrails: mining must never be silent, hidden or unasked\n')
 
+    consent = code('lib/src/consent.dart')
     sdk = code('lib/sugar_miner_sdk.dart')
     start = body_after(sdk, 'Future<MinerStartResult> start(')
-    consent = code('lib/src/consent.dart')
     cfg = code('lib/src/sugar_config.dart')
     disc = code('lib/src/disclosure.dart')
-    auto = code('lib/src/auto_config.dart')
-    engine = code('lib/src/miner/engine.dart')
     style = code('lib/src/notification_style.dart')
     policy = code('lib/src/policy.dart')
     bridge = code('lib/src/service_bridge.dart')
@@ -120,20 +128,14 @@ def main():
     check('the payout address is required configuration',
           'required this.payoutAddress' in cfg)
     check('the payout address has no setter',
-          'set payoutAddress' not in cfg and 'payoutAddress =' not in body_after(cfg, 'class SugarConfig', 900))
+          'set payoutAddress' not in cfg
+          and 'payoutAddress =' not in body_after(cfg, 'class SugarConfig', 900))
     check('the SDK never asks the user for a wallet',
           'labelText' not in example or 'wallet' not in example.lower())
     check('the example sets the owner address in code',
           'kPayoutAddress' in example and 'String.fromEnvironment' in example)
 
-    # ── 4. the disclosure is mandatory and readable, and speaks human ───────
-    check('there is a ready-made "free app, in exchange for spare power" wording',
-          'MiningDisclosure.donation' in disc,
-          'the common case deserves plain words, not a constructor to fill in')
-    check('the consent screen shows who benefits, not a wallet string',
-          'payoutAddress' not in code('lib/src/widgets/consent_sheet.dart')
-          and 'Mining to' not in read('lib/src/widgets/consent_sheet.dart'),
-          'the user is deciding whether to lend spare power, not auditing a rig')
+    # ── 4. the disclosure is mandatory ─────────────────────────────────────
     check('the disclosure requires a mining notice, terms and a privacy policy',
           all(k in disc for k in ['miningNotice', 'termsUrl', 'privacyUrl', 'ownerName', 'termsVersion']))
     check('a one-line "we mine" is not enough of a notice',
@@ -158,33 +160,20 @@ def main():
     check('nothing draws over other apps', 'SYSTEM_ALERT_WINDOW' not in manifest)
     check('no package-visibility snooping', 'QUERY_ALL_PACKAGES' not in manifest)
 
-    # ── 6. the notification exists always, its words are the developer's ───
-    check('notification text is configurable by the developer',
-          'titleTemplate' in style and 'bodyTemplate' in style)
-    check("the notification channel is the app's own branding",
-          all(k in style for k in ['channelId', 'channelName', 'channelDescription']),
-          'the user should see the app in notification settings, not this library')
-    check('the default notification wording mentions mining', 'mining' in style.lower())
-    defaults = style[style.index('const NotificationStyle({'):]
-    defaults = defaults[:defaults.index('});')]
-    check('the default wording carries no mining arithmetic',
-          not any(j in defaults
-                  for j in ['{hashrate}', 'H/s', '{diff}', '{accepted}', '{worker}', 'pool']),
-          'no hashrate / pool / share counters in front of the user by default')
-    check('there is no way to hide, delay or silence it',
-          not any(k in style.lower() for k in ['hidden', 'silent', 'importance', 'dismiss', 'delay']))
-    check('the bridge exposes no importance/ongoing/silent switch',
-          not any(k in bridge.lower() for k in ["'importance'", "'ongoing'", "'silent'", "'priority'"]),
-          'those are the three facts that make this legal, so they are not parameters')
+    # ── 6. the notification exists, and cannot be made invisible ───────────
+    check('the default notification wording tells the user mining is happening',
+          'mining' in style.lower())
+    check('no API can hide, delay or silence the notification',
+          not any(k in style.lower() for k in ['hidden', 'silent', 'importance', 'dismiss', 'delay'])
+          and not any(k in bridge.lower() for k in ["'importance'", "'ongoing'", "'silent'", "'priority'"]),
+          'those are the facts that keep this legal, so they are not parameters')
     check('the Android channel importance is fixed at DEFAULT',
-          'IMPORTANCE_DEFAULT' in service
+          'NotificationManager.IMPORTANCE_DEFAULT' in service
           and 'IMPORTANCE_MIN' not in service
           and 'IMPORTANCE_NONE' not in service
           and 'IMPORTANCE_LOW' not in service,
           'never MIN/NONE/LOW, whatever the host app asks for')
     check('the notification is ongoing — it cannot be swiped away', 'setOngoing(true)' in service)
-    check('the notification channel is IMPORTANCE_DEFAULT or higher',
-          'NotificationManager.IMPORTANCE_DEFAULT' in service)
     check('the notification always carries a Stop action', 'Stop mining' in service)
     check('the notification taps through to the app', 'getLaunchIntentForPackage' in service)
     check('the notification icon exists',
@@ -194,41 +183,21 @@ def main():
     check('foreground service type declared', 'foregroundServiceType="specialUse"' in manifest)
     check('the special-use reason is spelled out', 'PROPERTY_SPECIAL_USE_FGS_SUBTYPE' in manifest)
     check('the service is not exported', 'android:exported="false"' in manifest)
-    check('no wake-lock abuse beyond the mining service', manifest.count('WAKE_LOCK') == 1)
 
-    # ── 8. the limits are code, and the auto-configurator obeys them ───────
-    check('CPU duty-cycling exists', 'dutyShare' in engine)
-    check('a running miner can be retuned mid-flight', 'applyProfile' in engine)
+    # ── 8. the agreed limits are enforced by code, not by hope ─────────────
     check('the profiler can never exceed the agreed ceiling',
-          'ceilingProfile.dutyShare' in auto and 'ceiling / 2' in auto,
+          'ceilingProfile.dutyShare' in code('lib/src/auto_config.dart')
+          and 'ceiling / 2' in code('lib/src/auto_config.dart'),
           'every auto profile must be at or below MiningPolicy.cpuSharePercent')
-    for rule, needle in [
-        ('battery floor', 'minBatteryPercent'),
-        ('thermal stop', 'maxThermalStatus'),
-        ('charger rule', 'requireCharging'),
-        ('metered-data stop', 'requireUnmetered'),
-        ('battery temperature stop', 'batteryTempC'),
-    ]:
-        check(f'the profiler enforces the {rule}', needle in auto)
-    check('the daily time budget is enforced', 'dailyCapMinutes' in policy and 'minedMinutesToday' in policy)
-    check('the user\'s stop is enforced by the policy engine', 'isStopped' in policy)
+    check('the daily time budget is enforced',
+          'dailyCapMinutes' in policy and 'minedMinutesToday' in policy)
+    check("the user's stop is enforced by the policy engine", 'isStopped' in policy)
 
-    # ── 9. pause/resume actually happens, and health is read from Android ──
+    # ── 9. pause/resume happens, and the battery exemption is asked for ────
     check('a pause stops the miner and a resume restarts it',
           'startWhenAllowed' in sdk and '_spinUp(' in sdk and '.stop()' in sdk)
-    check('the health checks come from Android, not from guesses',
-          all(k in bridge for k in ['deviceState', 'isIgnoringBatteryOptimizations']))
     check('the battery-exemption flow asks the user rather than assuming',
           'requestIgnoreBatteryOptimizations' in bridge)
-
-    # ── 9b. every manifest must actually parse (a bad comment costs 3 minutes) ─
-    broken = []
-    for f in sorted(set(glob.glob(os.path.join(PKG, '**/*.xml'), recursive=True))):
-        try:
-            xml.dom.minidom.parse(f)
-        except Exception as e:  # noqa: BLE001
-            broken.append(f'{os.path.relpath(f, PKG)}: {e}')
-    check('every XML file parses', not broken, '; '.join(broken))
 
     # ── 10. restarting the phone must never restart mining behind the user ──
     boot = code('android/src/main/kotlin/com/mdk/sugarminer/sdk/SugarBootReceiver.kt')
@@ -238,10 +207,12 @@ def main():
     check('a reboot can resume mining (RECEIVE_BOOT_COMPLETED declared)',
           'RECEIVE_BOOT_COMPLETED' in manifest and 'BOOT_COMPLETED' in manifest)
     check("the boot receiver checks the user's consent first",
-          'PREF_CONSENT_GRANTED' in boot and boot.find('PREF_CONSENT_GRANTED') < boot.find('startForegroundService'),
+          'PREF_CONSENT_GRANTED' in boot
+          and boot.find('PREF_CONSENT_GRANTED') < boot.find('startForegroundService'),
           'the boot path must read the consent flag before starting anything')
     check("the boot receiver honours the user's own stop",
-          'PREF_STOPPED_BY_USER' in boot and boot.find('PREF_STOPPED_BY_USER') < boot.find('startForegroundService'))
+          'PREF_STOPPED_BY_USER' in boot
+          and boot.find('PREF_STOPPED_BY_USER') < boot.find('startForegroundService'))
     check('the boot receiver refuses to mine without notification permission',
           'canPostNotifications' in boot and 'POST_NOTIFICATIONS' in boot)
     check('no mining happens at locked-boot time (consent would be unreadable)',

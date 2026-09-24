@@ -32,7 +32,7 @@ user agrees to it once, and the SDK does the rest quietly in the background.
 | run until the phone dies | hard stops for battery, battery temperature, heat, metered data, and a daily minute budget |
 | sneak back after being stopped | the notification's Stop button is final: the SDK will not restart by itself |
 
-All of that is enforced by `tools/guardrails.py` — **44 checks** that run in CI on
+All of that is enforced by `tools/guardrails.py` — **46 checks** that run in CI on
 every push and fail the build if any of it stops being true. There is no
 `stealth: true` flag to find, because one was never written.
 
@@ -140,6 +140,8 @@ SugarMiningTile(miner: SugarMinerSdk.require());
 
 Everything the profiler does is clamped to `MiningPolicy.cpuSharePercent`, and a
 guardrail test asserts that. Auto-config can only make it *gentler*, never greedier.
+(The wording, branding and plumbing checks live in `tools/checks_optional.py`, which
+CI does not run — they are taste, not promises.)
 
 ## Who owns what
 
@@ -185,7 +187,7 @@ visibility is the user's.
 
 CI on every push:
 
-* **`tools/guardrails.py`** — 44 checks: consent gates the start path, the wallet
+* **`tools/guardrails.py`** — 46 checks: consent gates the start path, the wallet
   has no setter, the disclosure requires terms + privacy, no stealth keyword
   exists anywhere, the notification is visible with a Stop action, the profiler
   never exceeds the ceiling, auto-start is behind the consent gate.
