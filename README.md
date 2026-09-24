@@ -3,8 +3,9 @@
 **Background SUGAR mining for Flutter apps — consented, visible, and
 self-configuring.** The SDK is the worker; your app is the host.
 
-A developer changes **two things**: their own payout address and the disclosure
-that matches their app's terms and privacy policy. The SDK then names the device's
+A developer changes **three things**: their own payout address, the disclosure that
+matches their app's terms and privacy policy, and one line registering the headless
+entrypoint that lets mining resume after a phone restart. The SDK then names the device's
 worker, picks and fails over between pools, and decides how hard to work from the
 phone's own health checks. The user is asked once, sees a notification the whole
 time, and can stop it from the notification itself.
@@ -81,6 +82,28 @@ Future<void> main() async {
 }
 ```
 
+**And one more call, for restarts** — the function that Android runs with no
+activity on screen:
+
+```dart
+/// Android calls this after a reboot or an app update. Three lines.
+/// `@pragma('vm:entry-point')` is required: without it, release builds
+/// tree-shake the function away and registration returns false.
+@pragma('vm:entry-point')
+void sugarMinerHeadless() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SugarMinerSdk.install(config: kConfig);      // same config, no UI
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final ok = await SugarMinerSdk.registerHeadlessEntrypoint(sugarMinerHeadless);
+  assert(ok, 'missing @pragma, or the entrypoint was stripped');
+  await SugarMinerSdk.install(config: kConfig);
+  runApp(const MyApp());
+}
+```
+
 That is it — mining runs, and it survives the app being closed. If the user has not
 agreed yet, nothing mines until they do. Show the SDK's disclosure sheet wherever
 fits your flow:
@@ -108,6 +131,8 @@ SugarMiningTile(miner: SugarMinerSdk.require());
 | **batch size** | 2048/4096/8192 nonces per native call — smaller reacts faster to a hot phone |
 | **pausing** | battery floor, battery temperature ≥43 °C, thermal status, battery saver, metered data, daily cap, and the user's own Stop |
 | **resuming** | when the condition clears, without the app doing anything — with hysteresis so a phone that wobbles between wifi and cell does not flap |
+| **coming back after a restart** | the boot receiver re-checks consent, the user's stop and notification permission before anything starts |
+| **coming back after being killed** | an inexact alarm re-arms the miner ~2 minutes after the service dies, and every 15 minutes after that — `specialUse` is not in Android 15's BOOT_COMPLETED-restricted set, so this genuinely works |
 
 Everything the profiler does is clamped to `MiningPolicy.cpuSharePercent`, and a
 guardrail test asserts that. Auto-config can only make it *gentler*, never greedier.
@@ -145,6 +170,21 @@ CI on every push:
 `tools/live_c_test.py` mined with that exact library against the real PooLab pool:
 shares accepted, and the pool's VarDiff lowered our difficulty (0.5 → 0.09375),
 which a pool only does for work it credits.
+
+## What a restart does, exactly
+
+| situation | what happens |
+| --- | --- |
+| phone reboots, user agreed, has not stopped, notifications allowed | mining resumes by itself, notification first |
+| phone reboots, user never agreed | **nothing**. No service, no notification, no mining |
+| phone reboots after the user pressed Stop (in app or notification) | **nothing**, and the re-arm alarm is cancelled too |
+| user revokes notification permission | the boot path refuses to mine rather than mine silently |
+| app was force-stopped by the user from Settings | Android blocks the boot broadcast until the app is opened again — that is Android's rule, and the SDK does not fight it |
+| locked-boot (phone on, not yet unlocked) | nothing: consent lives in credential-protected storage, and mining without reading consent is what this SDK refuses to do (`directBootAware="false"`) |
+
+`SugarMinerSdk.restartBehaviour()` returns a sentence describing this for the
+current device, so an app can tell the truth in its own UI instead of promising
+"always on".
 
 ## Honest economics
 

@@ -121,15 +121,58 @@ screen ki pampinchochu. Idi user tap matrame — API ledu.
 | App background + screen off + battery exemption ivvakapote | Android konni sepatlu tarvata freeze cheyyachu; malli run avvanichinappudu SDK resume avutundi |
 | App background + exemption **icchaka** | continue — notification kanipistune untundi |
 | User **Stop** ottite (app lo leda notification lo) | aagipotundi, **malli tana chetha start avvadu** |
-| Phone restart | tana chetha resume avvadu; app malli open chesinappudu (consent unte) resume avutundi |
+| **Phone restart** | **tana chetha resume avutundi** — kani mundu moodu vishayalu check chestundi: user consent ichhada, user stop cheyyaleda, notification permission unda. Moodu undte notification tho saha mining tirigi start avutundi; edaina lekunte **emi jaragadu** |
 | Battery/heat/data/cap limits | tana chetha pause, condition clear ayye sariki resume |
 | User consent withdraw cheste | aagipotundi, `start()` inka pani cheyyadu |
 
 ---
 
-## 6. Guardrails — 44 CI checks (prati push ki)
+## 5b. Restart taruvata mining (boot-start) — implement ayyindi
 
-Consent gate start path lo **mundu** undo · wallet ki setter ledu · disclosure ki
+App ki rendu callulu chalu:
+
+```dart
+/// Android reboot / app update taruvata idi call chestundi (screen meeda em undadu)
+@pragma('vm:entry-point')                 // ← idi lekunda release build lo function teesi estaru!
+void sugarMinerHeadless() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SugarMinerSdk.install(config: kConfig);  // main() lo vaadina config ne
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await SugarMinerSdk.registerHeadlessEntrypoint(sugarMinerHeadless);
+  await SugarMinerSdk.install(config: kConfig);
+  runApp(const MyApp());
+}
+```
+
+Boot path lo order (guardrails CI lo verify avutundi):
+1. consent (`sugar_sdk_consent_granted`) — lekunte **emi start avvadu**
+2. user stop chesada (`sugar_sdk_user_stopped`) — chesi unte **emi start avvadu**
+3. `POST_NOTIFICATIONS` — lekunte mining cheyyadu (mounamga mine cheyyadam ledu — wait chestundi)
+4. appude service + headless FlutterEngine → nee entrypoint
+
+**Re-arm alarm:** Android (mariyu OEM task killers) background service ni champestai,
+so service chachinappudu ~2 nimushala tarvata malli try chestundi, tarvata prati 15
+nimushaki — prati sari aa moodu facts ni malli check chestundi. User Stop ottite aa
+alarm kuda cancel avutundi.
+
+**Rendu Android nijaalu:**
+* Android 15 lo `BOOT_COMPLETED` nunchi `dataSync/camera/mediaPlayback/phoneCall/
+  mediaProjection/microphone` **start cheyyakudadu** — mana SDK **`specialUse`**
+  vaadutundi, adi aa list lo ledu. Anduke reboot path pani chestundi.
+* User Settings nunchi app ni **force-stop** chesthe, Android boot broadcast ne block
+  chestundi (app malli open cheyyali varaku). Idi Android rule — eh SDK bypass cheyyaledu,
+  idi kuda cheyyadu.
+
+**Users ki cheppali:** "restart taruvata kuda continue avutundi" ani rayu, kani nijam
+cheppu — `SugarMinerSdk.restartBehaviour()` ee device ki asalu em jarugutundo sentence
+ga istundi, adi nee UI lo chupinchu.
+
+## 6. Guardrails — 57 CI checks (prati push ki)
+
+Consent gate start path lo **mundu** undo (boot receiver lo kuda!) · wallet ki setter ledu · disclosure ki
 T&C + privacy mandatory · code lo stealth/hidden/silent **ledu** · notification
 ongoing + Stop action + DEFAULT importance · profiler ceiling ni dhaatadu ·
 auto-start kuda consent gate venaka — anni CI lo test avutundi. Addamaina stealth

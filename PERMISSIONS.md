@@ -18,6 +18,7 @@ You do not edit anything. These arrive merged from the plugin:
 | `POST_NOTIFICATIONS` | the mining notification (Android 13+) | **the user**, via a system dialog |
 | `WAKE_LOCK` | keep the CPU on with the screen off | nobody |
 | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | lets you ask for the exemption below | **the user**, via a system dialog |
+| `RECEIVE_BOOT_COMPLETED` | resume mining after a reboot or app update, for a user who agreed and has not stopped | nobody |
 
 The `specialUse` declaration includes a `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` string
 that says, in the app's own manifest, that it mines on the user's behalf with
@@ -77,31 +78,57 @@ that grants this for you — it must be the user's tap.
 | --- | --- |
 | App open, screen on | mining at the agreed share of one core (default 25%, auto-tuned down when warm or on battery) |
 | App backgrounded, screen off, battery exemption granted | continues; the notification stays up |
-| App backgrounded, no exemption | may be frozen by Android after a while — the SDK resumes when it is allowed to run again |
+| App backgrounded, no exemption | may be frozen by Android after a while; the re-arm alarm brings it back when Android lets it run |
 | User presses Stop (app **or notification**) | stops and will **not** restart by itself, ever |
-| Phone restarts | mining does **not** resume on its own. The SDK resumes when the app is next launched, if the user had consented and `resumeWhenAppOpens` is on. A true boot-start needs a headless engine entrypoint in your app — see below |
+| Phone restarts | resumes by itself, notification first — **if** the user agreed, has not stopped, and notifications are allowed. Otherwise nothing happens at all |
 | Battery below the floor, too warm, metered data, daily cap reached | pauses on its own; resumes when the condition clears |
 | User withdraws consent | stops, and `start()` refuses from then on |
 
-### Want boot-start?
+### Boot-start: implemented, not a snippet
 
-Android allows a receiver to restart a service after a reboot
-(`RECEIVE_BOOT_COMPLETED`), but the mining itself runs in Dart, so your app has
-to be able to run Dart with no activity. Add this to your `main.dart`:
+Mining survives a reboot. Your app provides one entrypoint and registers it:
 
 ```dart
 @pragma('vm:entry-point')
 void sugarMinerHeadless() {
   WidgetsFlutterBinding.ensureInitialized();
-  // the same call as main(): it asks nothing and shows nothing — it just starts
-  // mining if this user already consented and has not stopped it
-  SugarMinerSdk.install(config: kConfig);
+  SugarMinerSdk.install(config: kConfig);       // same config you use in main()
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final ok = await SugarMinerSdk.registerHeadlessEntrypoint(sugarMinerHeadless);
+  assert(ok);
+  await SugarMinerSdk.install(config: kConfig);
+  runApp(const MyApp());
 }
 ```
 
-and note it in your disclosure ("continues after a restart until you turn it
-off"). Default is **off**: waking up to a mining notification has to be something
-the user was told about, not something they discover.
+What the boot path does, in order, before it starts anything:
+
+1. reads the stored consent (`sugar_sdk_consent_granted`) — no consent, no mining;
+2. reads the user's stop flag (`sugar_sdk_user_stopped`) — a stopped miner stays stopped;
+3. checks `POST_NOTIFICATIONS` — no notification permission, no mining (it will not
+   mine silently, so it waits instead);
+4. starts the foreground service, then spins up a headless `FlutterEngine`
+   (registering plugins the same way your activity does) and calls your entrypoint.
+
+Two Android details worth knowing:
+
+* Android 15 forbids `BOOT_COMPLETED` receivers from starting `dataSync`, `camera`,
+  `mediaPlayback`, `phoneCall`, `mediaProjection` and `microphone` foreground
+  services. This SDK uses **`specialUse`**, which is not on that list — that is why
+  the reboot path works at all.
+* If the user force-stops the app from Settings, Android blocks the boot broadcast
+  until the app is opened again. No SDK can bypass that, and this one does not try.
+
+The re-arm alarm is the companion piece: Android (and OEM task killers) end
+background services, so the service schedules an inexact wake-up ~2 minutes after it
+dies, then every 15 minutes, and the same receiver re-checks the three facts above
+each time. Stopping mining cancels it.
+
+Tell users what this means in *your* words. `SugarMinerSdk.restartBehaviour()` gives
+you the sentence for the current device — surface it instead of promising "always on".
 
 ## What NOT to request
 
@@ -110,8 +137,9 @@ the user was told about, not something they discover.
   to draw over the screen, and asking for it makes the app look like adware (Play
   restricts it for the same reason). If you want an on-screen mining indicator,
   say so in your own app's UI instead.
-* **`RECEIVE_BOOT_COMPLETED`** unless you actually implemented the headless
-  entrypoint above and disclosed it.
+* Nothing extra for boot-start: `RECEIVE_BOOT_COMPLETED` is declared by the SDK and
+  is pointless without a registered entrypoint, so register one (above) or leave it —
+  the receiver does nothing either way.
 * **`ACCESS_FINE_LOCATION`, contacts, phone state, etc.** — no. A miner that asks
   for these is not mining, it is spying.
 * **`QUERY_ALL_PACKAGES`** — no reason.
