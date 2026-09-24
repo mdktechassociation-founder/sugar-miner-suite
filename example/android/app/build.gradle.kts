@@ -31,6 +31,9 @@ android {
         release {
             signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
+            // AGP 9 defaults resource shrinking to on, which needs code
+            // shrinking; keep both off (the FFI symbols are found by name).
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
