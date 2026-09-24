@@ -229,7 +229,8 @@ class _ExampleHomeState extends State<ExampleHome> {
                     ok: true,
                     title: 'Survives a restart',
                     detail: _restart,
-                    action: () async => setState(() => _restart = await SugarMinerSdk.restartBehaviour()),
+                    action: () => SugarMinerSdk.restartBehaviour(policy: miner.policy)
+                        .then((v) => mounted ? setState(() => _restart = v) : null),
                   ),
                   const SizedBox(height: 6),
                   Text(
