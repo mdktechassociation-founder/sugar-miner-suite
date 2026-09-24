@@ -32,6 +32,15 @@ jobs:
       - name: Build the C library and check the SugarChain genesis hash
         run: python3 tools/selftest.py
 
+      # The plugin's real CMakeLists (the one the APK uses) must configure and
+      # build on the host too — a wrong source path fails here in seconds
+      # instead of after a four minute Android build.
+      - name: Configure and build the plugin's CMake project
+        run: |
+          cmake -S android/src/main/cpp -B /tmp/cmake-check -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/cmake-check
+          nm -D /tmp/cmake-check/libyespower.so | grep -E 'yp_hash|yp_scan|yp_version|yp_free_local'
+
   # Proof that an ordinary app can integrate this in a few lines.
   example-apk:
     name: build the example app

@@ -5,7 +5,8 @@ set(CMAKE_C_STANDARD 11)
 
 # One copy of the hashing code, in the package's native/yespower/ — the very same
 # sources tools/selftest.py compiles on a desktop to check the genesis vector.
-set(YP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../native/yespower)
+# (android/src/main/cpp -> package root is four levels up)
+set(YP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../native/yespower)
 
 if(NOT EXISTS ${YP_DIR}/yp_bridge.c)
     message(FATAL_ERROR "yespower sources not found at ${YP_DIR}")
