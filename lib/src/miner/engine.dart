@@ -26,7 +26,18 @@ class MiningSession {
 
   /// Fraction of the time this loop is allowed to hash, 0 < dutyShare <= 1.
   /// 0.25 means: hash for a batch, then sleep three times as long.
-  final double dutyShare;
+  /// The health-check profiler rewrites this at runtime via [applyProfile].
+  double dutyShare;
+
+  /// Nonces per native call. Smaller batches react faster to a hot phone.
+  int batchSize;
+
+  /// Applies a new setting from the auto-configurator, mid-run and safely: the
+  /// change lands between batches, never inside one.
+  void applyProfile(double duty, int batch) {
+    dutyShare = duty.clamp(0.0, 1.0);
+    batchSize = batch;
+  }
 
   StratumJob? _job;
   int _en2 = 0;
@@ -36,13 +47,12 @@ class MiningSession {
   bool running = false;
   bool paused = false;
 
-  static const int batch = 4096;
-
   MiningSession({
     required this.client,
     required this.yespower,
     required this.log,
     this.dutyShare = 1.0,
+    this.batchSize = 4096,
     this.onStats,
     this.onShare,
   });
@@ -80,7 +90,7 @@ class MiningSession {
       final res = yespower.scan(
         headerPrefix: prefix,
         startNonce: _nonceBase,
-        count: batch,
+        count: batchSize,
         targetBe32: target,
       );
 
@@ -96,8 +106,8 @@ class MiningSession {
         client.submit(job, en2Hex, res.nonce);
       }
 
-      _nonceBase += batch;
-      if (_nonceBase > 0xFFFFFFFF - batch) {
+      _nonceBase += batchSize;
+      if (_nonceBase > 0xFFFFFFFF - batchSize) {
         _nonceBase = 0;
         _en2++;
       }

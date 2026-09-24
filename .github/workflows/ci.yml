@@ -68,8 +68,12 @@ jobs:
           cd example
           flutter pub get
 
-      - name: Analyze the SDK
-        run: flutter analyze --no-fatal-infos || true
+      # fatal on purpose: a Dart error here costs 30 seconds, the same error
+      # discovered during the APK build costs five minutes
+      - name: Analyze the SDK and the example
+        run: |
+          flutter analyze
+          cd example && flutter analyze
 
       - name: Build the example APK
         run: |

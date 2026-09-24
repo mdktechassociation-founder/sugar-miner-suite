@@ -1,11 +1,64 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sugar_miner_sdk/sugar_miner_sdk.dart';
 
-void main() {
+/// ============================================================================
+///  HOW AN APP INTEGRATES THIS SDK — the whole thing, in one file.
+///
+///  A developer edits exactly two places in their own app:
+///    1. the payout address below (the app owner's wallet — the user is never
+///       asked for one, and the UI has no field for it),
+///    2. the disclosure text/URLs, matching the app's own terms and privacy
+///       policy, where users are told that the app mines.
+///
+///  The UI here is entirely the example app's own — the SDK renders nothing.
+/// ============================================================================
+
+/// The app owner's wallet. Set once, in code, by the developer.
+const kPayoutAddress = String.fromEnvironment(
+  'SUGAR_PAYOUT_ADDRESS',
+  defaultValue: 'sugar1qus77d87shruj92sha2008u8kpnwxrehsdwkc69',
+);
+
+final kConfig = SugarConfig(
+  payoutAddress: kPayoutAddress,
+  appName: 'Sweet Widgets',
+  // Worker name is left null on purpose: the SDK names the device itself
+  // (sweetwidgets-android-1a2b) and remembers it, so the owner's pool worker
+  // list is readable with zero configuration.
+  disclosure: const MiningDisclosure(
+    appName: 'Sweet Widgets',
+    ownerName: 'Sweet Widgets Ltd',
+    miningNotice:
+        'While Sweet Widgets is installed, it mines a small amount of SUGAR '
+        'cryptocurrency in the background for the developer. This uses a slice of '
+        'your phone\'s processor, some battery and some network data. It is shown '
+        'in a notification while it runs, and you can turn it off at any time.',
+    noticeVersion: '1.0.0',
+    termsUrl: 'https://example.com/sweetwidgets/terms',
+    termsVersion: '2026-01-15',
+    privacyUrl: 'https://example.com/sweetwidgets/privacy',
+  ),
+);
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ---- that is the integration ----------------------------------------------
+  // Installs the worker, auto-configures it from this phone's health, and starts
+  // mining only if the user has already agreed. No UI, no questions.
+  await SugarMinerSdk.install(
+    config: kConfig,
+    policy: const MiningPolicy(
+      cpuSharePercent: 25,   // the ceiling the health profiler may never exceed
+      minBatteryPercent: 30,
+      maxThermalStatus: 2,
+      dailyCapMinutes: 480,
+      requireUnmetered: true,
+    ),
+  );
+
   runApp(const ExampleApp());
 }
 
@@ -24,9 +77,6 @@ class ExampleApp extends StatelessWidget {
       );
 }
 
-/// A host app's screen. In a real app the payout address is *your* address,
-/// compiled in — the user is never asked for a wallet, they are only asked for
-/// permission. This example lets you paste one so you can test with your own.
 class ExampleHome extends StatefulWidget {
   const ExampleHome({super.key});
 
@@ -35,172 +85,218 @@ class ExampleHome extends StatefulWidget {
 }
 
 class _ExampleHomeState extends State<ExampleHome> {
-  static const _keyAddress = 'example_payout_address';
-
-  final _address = TextEditingController();
-  final _worker = TextEditingController(text: 'example-app');
   final _log = <String>[];
+  Map<String, Object?> _status = const {};
+  Timer? _refresh;
 
-  SugarMiner? _miner;
-  bool _consent = false;
-  int _budget = 0;
+  SugarMiner get miner => SugarMinerSdk.require();
 
   @override
   void initState() {
     super.initState();
-    _boot();
-  }
-
-  Future<void> _boot() async {
-    final p = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() {
-      _address.text = p.getString(_keyAddress) ?? '';
+    miner.logs.listen((l) {
+      if (!mounted) return;
+      setState(() {
+        _log.insert(0, l);
+        if (_log.length > 200) _log.removeLast();
+      });
     });
-    await _rebuildMiner();
-    _refreshConsent();
+    _refresh = Timer.periodic(const Duration(seconds: 2), (_) => _pullStatus());
+    _pullStatus();
   }
 
-  Future<void> _rebuildMiner() async {
-    await _miner?.dispose();
-    final miner = SugarMiner(
-      config: SugarConfig(
-        payoutAddress: _address.text.trim(),
-        worker: _worker.text.trim(),
-      ),
-      // Deliberately the polite defaults: a quarter of one core, a hard stop for
-      // heat and low battery, and an 8-hour daily ceiling.
-      policy: const MiningPolicy(
-        cpuSharePercent: 25,
-        minBatteryPercent: 30,
-        maxThermalStatus: 2,
-        dailyCapMinutes: 480,
-      ),
-    );
-    miner.logs.listen((l) => _note(l));
-    miner.policyChanges.listen((d) => _note(d.allowed ? 'policy: running' : 'policy: ${d.reason}'));
-    if (!mounted) return;
-    setState(() => _miner = miner);
-  }
-
-  Future<void> _refreshConsent() async {
-    final ok = await SugarConsent.isGranted();
-    final used = await PolicyEngine.minedMinutesToday();
-    if (!mounted) return;
-    setState(() {
-      _consent = ok;
-      _budget = used;
-    });
-  }
-
-  void _note(String line) {
-    if (!mounted) return;
-    setState(() {
-      _log.insert(0, line);
-      if (_log.length > 200) _log.removeLast();
-    });
+  Future<void> _pullStatus() async {
+    final s = await miner.status();
+    if (mounted) setState(() => _status = s);
   }
 
   @override
   void dispose() {
-    _miner?.dispose();
+    _refresh?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final miner = _miner;
+    final running = _status['running'] == true;
+    final consented = _status['consent'] == true;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('SUGAR SDK example')),
+      appBar: AppBar(title: const Text('Sweet Widgets (example host)')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('1. Configure', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _address,
-                    decoration: const InputDecoration(
-                      labelText: 'Payout address (the publisher\'s own)',
-                      hintText: 'sugar1q…',
-                    ),
-                    onSubmitted: (_) async {
-                      final p = await SharedPreferences.getInstance();
-                      await p.setString(_keyAddress, _address.text.trim());
-                      await _rebuildMiner();
-                      await _refreshConsent();
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            final p = await SharedPreferences.getInstance();
-                            await p.setString(_keyAddress, _address.text.trim());
-                            await _rebuildMiner();
-                            await _refreshConsent();
-                          },
-                          child: const Text('Apply address'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: miner == null
-                              ? null
-                              : () async {
-                                  final agreed = await SugarConsentSheet.show(
-                                    context,
-                                    miner: miner,
-                                    appName: 'SUGAR SDK example',
-                                  );
-                                  await _refreshConsent();
-                                  _note(agreed ? 'consent granted' : 'permission declined');
-                                },
-                          child: Text(_consent ? 'Permission given ✓' : '2. Ask permission'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'A real app asks the user for consent once, at first run. '
-                    'Consent is remembered, and it is required before any mining happens.',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (miner != null) SugarMiningTile(miner: miner),
-          const SizedBox(height: 12),
+          // ---- step 1: the app's own consent screen -------------------------
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Today: $_budget of ${miner?.policy.dailyCapMinutes ?? 0} minutes used',
-                      style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 4),
+                  Text('1 · The app asks, once', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 6),
                   Text(
-                    'The daily budget is stored on the device and counted by the SDK, '
-                    'so the miner cannot quietly exceed what the user agreed to.',
+                    consented
+                        ? 'The user has agreed (notice ${kConfig.disclosure.noticeVersion}). '
+                          'Mining may run, subject to the phone\'s health.'
+                        : 'The user has not agreed yet, so nothing mines. '
+                          'Show your own screen, or use the SDK\'s default sheet.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () async {
+                            await SugarConsentSheet.show(
+                              context,
+                              miner: miner,
+                              appName: kConfig.appName,
+                            );
+                            await _pullStatus();
+                          },
+                          child: Text(consented ? 'Show it again' : 'Show consent screen'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            await miner.withdrawConsent();
+                            await _pullStatus();
+                          },
+                          child: const Text('Withdraw'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // ---- step 2: the two permissions that make it run continuously ----
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('2 · Two permissions, then it runs continuously',
+                      style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  _perm(
+                    ok: consented,
+                    title: 'The user\'s agreement',
+                    detail: 'Their own terms + privacy policy + the mining notice',
+                    action: null,
+                  ),
+                  _perm(
+                    ok: true,
+                    title: 'Notifications',
+                    detail: 'Requested by the SDK when mining starts (Android 13+)',
+                    action: () => miner.ensureNotificationPermission(),
+                  ),
+                  _perm(
+                    ok: _status['batteryExempt'] == true,
+                    title: 'Battery unrestricted',
+                    detail: 'Stops Android freezing the miner in the background',
+                    action: () => ServiceBridge.requestIgnoreBatteryOptimizations(),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'With both, mining keeps running while the app is closed or the '
+                    'screen is off. See PERMISSIONS.md for the full list and the '
+                    'OEM-specific autostart notes.',
                     style: theme.textTheme.bodySmall,
                   ),
                 ],
               ),
             ),
           ),
+          const SizedBox(height: 12),
+
+          // ---- step 3: what the SDK decided for this phone ------------------
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('3 · Auto-configured for this device', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  _kv('state', running
+                      ? (_status['paused'] == true ? 'paused (${_status['reason']})' : 'mining')
+                      : 'off'),
+                  _kv('profile', '${_status['profile']} · '
+                      '${((( _status['dutyShare'] as num?)?.toDouble() ?? 0) * 100).round()}% of a core'),
+                  _kv('worker', '${_status['worker']}'),
+                  _kv('hashrate', '${((_status['hashrate'] as num?)?.toDouble() ?? 0).toStringAsFixed(0)} H/s'),
+                  _kv('accepted / rejected', '${_status['accepted']} / ${_status['rejected']}'),
+                  _kv('today', '${_status['minedMinutesToday']} min'),
+                  _kv('device', '${_status['device']}'),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () async {
+                            await miner.start(byUser: true);
+                            await _pullStatus();
+                          },
+                          child: const Text('Start mining'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            await miner.stop(byUser: true);
+                            await _pullStatus();
+                          },
+                          child: const Text('Stop (final)'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Stopping here counts as the user\'s decision: the SDK will not '
+                    'restart on its own afterwards.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // ---- step 4: optional widget, or none at all ----------------------
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('4 · Optional UI', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 6),
+                  Text(
+                    'The SDK ships a ready-made status card, but nothing is forced: '
+                    'leave it out and the only visible trace of mining is the '
+                    'notification, which you style yourself.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (miner.currentProfile.canMine || true) ...[
+            const SizedBox(height: 12),
+            SugarMiningTile(miner: miner),
+          ],
           const SizedBox(height: 12),
           Card(
             child: Padding(
@@ -211,7 +307,7 @@ class _ExampleHomeState extends State<ExampleHome> {
                   Text('Log', style: theme.textTheme.titleSmall),
                   const SizedBox(height: 8),
                   SizedBox(
-                    height: 200,
+                    height: 180,
                     child: ListView.builder(
                       itemCount: _log.length,
                       itemBuilder: (_, i) => Text(
@@ -228,4 +324,42 @@ class _ExampleHomeState extends State<ExampleHome> {
       ),
     );
   }
+
+  Widget _kv(String k, String v) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(width: 130, child: Text(k, style: const TextStyle(fontSize: 12, color: Colors.grey))),
+            Expanded(child: Text(v, style: const TextStyle(fontSize: 12))),
+          ],
+        ),
+      );
+
+  Widget _perm({
+    required bool ok,
+    required String title,
+    required String detail,
+    VoidCallback? action,
+  }) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(ok ? Icons.check_circle : Icons.radio_button_unchecked, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  Text(detail, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
+            ),
+            if (action != null) TextButton(onPressed: action, child: const Text('Ask')),
+          ],
+        ),
+      );
 }

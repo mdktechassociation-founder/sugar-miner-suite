@@ -11,6 +11,7 @@ import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
+import android.net.Uri
 import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -85,6 +86,8 @@ class SugarMinerPlugin :
                     action = SugarMiningService.ACTION_START
                     putExtra(SugarMiningService.EXTRA_TITLE, call.argument<String>("title"))
                     putExtra(SugarMiningService.EXTRA_TEXT, call.argument<String>("text"))
+                    putExtra(SugarMiningService.EXTRA_ICON, call.argument<String>("iconName"))
+                    putExtra(SugarMiningService.EXTRA_COLOR, call.argument<Int>("colorArgb") ?: 0)
                 }
                 ContextCompat.startForegroundService(appContext, intent)
                 result.success(true)
@@ -95,6 +98,8 @@ class SugarMinerPlugin :
                     action = SugarMiningService.ACTION_UPDATE
                     putExtra(SugarMiningService.EXTRA_TITLE, call.argument<String>("title"))
                     putExtra(SugarMiningService.EXTRA_TEXT, call.argument<String>("text"))
+                    putExtra(SugarMiningService.EXTRA_ICON, call.argument<String>("iconName"))
+                    putExtra(SugarMiningService.EXTRA_COLOR, call.argument<Int>("colorArgb") ?: 0)
                 }
                 ContextCompat.startForegroundService(appContext, intent)
                 result.success(true)
@@ -109,6 +114,38 @@ class SugarMinerPlugin :
             }
 
             "isForeground" -> result.success(SugarMiningService.running)
+
+            // permission 2: let this app run without battery optimisation, or
+            // Android will freeze the miner after a while in the background
+            "isIgnoringBatteryOptimizations" -> {
+                val pm = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+                result.success(isIgnoringBatteryOptimizations(pm))
+            }
+
+            "requestIgnoreBatteryOptimizations" -> {
+                val pm = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+                if (isIgnoringBatteryOptimizations(pm)) {
+                    result.success(true)
+                    return
+                }
+                try {
+                    appContext.startActivity(
+                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                            .setData(Uri.parse("package:${appContext.packageName}"))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                } catch (_: Exception) {
+                    // some ROMs hide that dialog; fall back to the settings list
+                    try {
+                        appContext.startActivity(
+                            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    } catch (_: Exception) {
+                    }
+                }
+                result.success(true)
+            }
 
             "openBatterySettings" -> {
                 val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
@@ -137,6 +174,10 @@ class SugarMinerPlugin :
         val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
         val percent = if (level >= 0 && scale > 0) level * 100 / scale else -1
 
+        // tenths of a degree Celsius — one more signal for the health profiler
+        val tempTenths = battery?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1) ?: -1
+        val tempC = if (tempTenths > 0) tempTenths / 10 else -1
+
         val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         var onWifi = false
         var connectionCostly = true
@@ -159,12 +200,19 @@ class SugarMinerPlugin :
         return mapOf(
             "charging" to charging,
             "batteryPercent" to percent,
+            "batteryTempC" to tempC,
             "onWifi" to onWifi,
             "metered" to connectionCostly,
             "screenOn" to pm.isInteractive,
             "thermalStatus" to thermal,
             "powerSaveMode" to pm.isPowerSaveMode,
+            "ignoringBatteryOptimizations" to isIgnoringBatteryOptimizations(pm),
         )
+    }
+
+    private fun isIgnoringBatteryOptimizations(pm: PowerManager): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        return pm.isIgnoringBatteryOptimizations(appContext.packageName)
     }
 
     private fun hasNotificationPermission(): Boolean {

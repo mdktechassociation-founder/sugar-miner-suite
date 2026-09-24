@@ -2,59 +2,60 @@ import 'dart:async';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'consent.dart';
+import 'auto_config.dart';
 import 'service_bridge.dart';
 import 'sugar_config.dart';
 
-/// Applies [MiningPolicy] to the actual phone, and keeps a daily time budget.
+/// Applies [MiningPolicy] to the actual phone, keeps the daily time budget, and
+/// asks [AutoConfigurator] how hard to work right now.
 class PolicyEngine {
   final MiningPolicy policy;
-  PolicyEngine(this.policy);
+  final AutoConfigurator profiler;
+  PolicyEngine(this.policy) : profiler = AutoConfigurator(policy: policy);
 
   static const _keyMinedDay = 'sugar_sdk_mined_day';
   static const _keyMinedSeconds = 'sugar_sdk_mined_seconds';
 
-  /// Ask Android what the device is doing right now.
-  Future<DeviceState> deviceState() async {
+  /// What Android says about the phone right now.
+  Future<DeviceHealth> health() async {
     try {
-      return DeviceState.fromMap(await ServiceBridge.deviceState());
+      final map = await ServiceBridge.deviceState();
+      return DeviceHealth.of(DeviceState.fromMap(map));
     } catch (_) {
-      return DeviceState.unknown;
+      return DeviceHealth.of(DeviceState.unknown);
     }
   }
 
-  /// Decide whether mining may run, given the device and today's usage.
-  Future<PolicyDecision> evaluate({DeviceState? state}) async {
-    final s = state ?? await deviceState();
+  /// Decide whether mining may run, and how hard. This is the single place that
+  /// answers "is the phone in a fit state", used by the start path and by the
+  /// watchdog that runs while mining.
+  Future<(PolicyDecision, MiningProfile)> evaluate() async {
+    if (await SugarConsentStop.isStopped()) {
+      return (const PolicyDecision(false, 'you stopped mining'), MiningProfile.paused);
+    }
 
-    if (policy.requireCharging && !s.charging) {
-      return const PolicyDecision(false, 'waiting for the charger');
-    }
-    if (!s.charging && s.batteryPercent < policy.minBatteryPercent) {
-      return PolicyDecision(
-          false, 'battery ${s.batteryPercent}% is below ${policy.minBatteryPercent}%');
-    }
-    if (policy.requireUnmetered && !s.onWifi) {
-      return const PolicyDecision(false, 'waiting for wifi');
-    }
-    if (s.thermalStatus > policy.maxThermalStatus) {
-      return PolicyDecision(
-          false, 'phone is too warm (${s.thermalLabel}) — cooling down');
-    }
-    if (s.powerSaveMode && !s.charging) {
-      return const PolicyDecision(false, 'battery saver is on');
-    }
-    if (policy.dailyCapMinutes > 0) {
+    final h = await health();
+    var profile = profiler.update(h);
+
+    if (profile.canMine && policy.dailyCapMinutes > 0) {
       final used = await minedMinutesToday();
       if (used >= policy.dailyCapMinutes) {
-        return PolicyDecision(
-            false, "today's ${policy.dailyCapMinutes} minute limit is used up");
+        profile = MiningProfile(
+          name: 'paused',
+          dutyShare: 0,
+          batch: profile.batch,
+          pauseReason: "today's ${policy.dailyCapMinutes} minute limit is used up",
+        );
       }
     }
-    return PolicyDecision.ok;
+
+    final decision = profile.canMine
+        ? const PolicyDecision(true, 'ok')
+        : PolicyDecision(false, profile.pauseReason ?? 'paused');
+    return (decision, profile);
   }
 
-  /// Minutes mined so far today (the budget resets at midnight local time).
+  /// Minutes mined so far today (resets at midnight local time).
   static Future<int> minedMinutesToday() async {
     final p = await SharedPreferences.getInstance();
     final day = DateTime.now().toIso8601String().substring(0, 10);
@@ -62,7 +63,6 @@ class PolicyEngine {
     return (p.getInt(_keyMinedSeconds) ?? 0) ~/ 60;
   }
 
-  /// Called by the miner every minute while it runs, so the budget is honest.
   static Future<void> addMinedSeconds(int seconds) async {
     final p = await SharedPreferences.getInstance();
     final day = DateTime.now().toIso8601String().substring(0, 10);
@@ -74,22 +74,22 @@ class PolicyEngine {
     await p.setInt(_keyMinedSeconds, (p.getInt(_keyMinedSeconds) ?? 0) + seconds);
   }
 
-  /// Watches the policy while mining runs and pauses/resumes as needed.
-  /// Returns a stream of decisions; the first one is emitted immediately.
-  Stream<PolicyDecision> watch({Duration every = const Duration(seconds: 30)}) {
-    late StreamController<PolicyDecision> ctrl;
+  /// Watches the phone while mining runs, and reports the profile to use.
+  Stream<MiningProfile> watch({Duration every = const Duration(seconds: 30)}) {
+    late StreamController<MiningProfile> ctrl;
     Timer? timer;
-    var last = <String>[];
+    String? lastKey;
 
     Future<void> tick() async {
-      final d = await evaluate();
-      if (last.isEmpty || last.last != '${d.allowed}|${d.reason}') {
-        last = [...last, '${d.allowed}|${d.reason}'];
-        ctrl.add(d);
+      final (_, profile) = await evaluate();
+      final key = '${profile.name}|${profile.dutyShare}|${profile.pauseReason}';
+      if (key != lastKey) {
+        lastKey = key;
+        ctrl.add(profile);
       }
     }
 
-    ctrl = StreamController<PolicyDecision>(
+    ctrl = StreamController<MiningProfile>(
       onListen: () async {
         await tick();
         timer = Timer.periodic(every, (_) => tick());
@@ -100,5 +100,10 @@ class PolicyEngine {
   }
 }
 
-/// A tiny helper the host app can use to gate its own UI on consent.
-Future<bool> miningConsentGiven() => SugarConsent.isGranted();
+/// Tiny indirection so this file does not import the consent store's whole API.
+class SugarConsentStop {
+  static Future<bool> isStopped() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getBool('sugar_sdk_user_stopped') ?? false;
+  }
+}

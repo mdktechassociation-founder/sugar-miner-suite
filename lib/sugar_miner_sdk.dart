@@ -1,47 +1,57 @@
 /// Consented background SUGAR mining for Flutter apps.
 ///
-/// Add it to an app, ask the device owner once, and the app can mine
-/// yespowerSUGAR for the publisher's address while it is backgrounded — politely:
-/// a quarter of one core by default, an always-visible notification, and hard
-/// stops for heat, battery, data and a daily time budget.
+/// The SDK is the worker; the app is the host. A developer does three things:
 ///
 /// ```dart
-/// final miner = SugarMiner(config: SugarConfig(payoutAddress: 'sugar1q…'));
-///
-/// // 1. ask once, in your own UI
-/// await SugarConsentSheet.show(context, miner: miner);
-///
-/// // 2. start / stop whenever you like
-/// await miner.start();
-/// miner.stats.listen((s) => print('${s.hashrate} H/s'));
+/// void main() async {
+///   WidgetsFlutterBinding.ensureInitialized();
+///   await SugarMinerSdk.install(
+///     config: SugarConfig(
+///       payoutAddress: 'sugar1q…the owner\'s address…',   // set here, never asked of the user
+///       disclosure: MiningDisclosure(...),                // the app's terms + privacy policy + one plain sentence
+///     ),
+///   );
+///   runApp(const MyApp());
+/// }
 /// ```
 ///
-/// What this SDK will never do — by construction, not by convention:
+/// That is the whole integration. Everything else — worker name, pool choice,
+/// duty cycle, batch size — is configured from the phone's own health checks, and
+/// the app's UI is untouched unless the developer wants a widget.
+///
+/// What this SDK will never do, by construction rather than by convention:
 /// it never mines without a recorded consent, it never hides its notification,
-/// it has no stealth/silent/hidden option, and it never evades battery or
-/// thermal limits. Those are not "not yet implemented" — there is no code path.
+/// it has no stealth/silent/hidden option, and it never evades the battery or
+/// thermal limits. Those are not "not implemented yet" — there is no code path.
 library;
 
 import 'dart:async';
 
+import 'src/auto_config.dart';
 import 'src/consent.dart';
+import 'src/disclosure.dart';
 import 'src/miner/engine.dart';
 import 'src/miner_isolate.dart';
 import 'src/miner_api.dart';
+import 'src/notification_style.dart';
 import 'src/policy.dart';
 import 'src/service_bridge.dart';
 import 'src/sugar_config.dart';
 
+export 'src/auto_config.dart' show AutoConfigurator, DeviceHealth, MiningProfile, WorkerIdentity;
 export 'src/consent.dart';
+export 'src/disclosure.dart';
 export 'src/miner/engine.dart' show MinerSnapshot, ShareFound, hashesPerShare;
 export 'src/miner_api.dart';
-export 'src/policy.dart';
+export 'src/notification_style.dart';
+export 'src/policy.dart' show PolicyEngine;
+export 'src/pool_endpoints.dart' show PoolEndpoint, PoolEndpoints;
 export 'src/service_bridge.dart';
 export 'src/sugar_config.dart';
 export 'src/widgets/consent_sheet.dart';
 export 'src/widgets/mining_tile.dart';
 
-/// The whole public surface: configure once, then [start] / [stop] / [dispose].
+/// The whole public surface: install once, then [start] / [stop] / [dispose].
 class SugarMiner implements SugarMinerApi {
   @override
   final SugarConfig config;
@@ -49,113 +59,152 @@ class SugarMiner implements SugarMinerApi {
   final MiningPolicy policy;
 
   MinerIsolate? _isolate;
-  StreamSubscription<PolicyDecision>? _watchdog;
+  StreamSubscription<MiningProfile>? _watchdog;
   Timer? _budgetTicker;
+  MiningProfile _profile = MiningProfile.paused;
   PolicyDecision _lastDecision = PolicyDecision.ok;
+  String _workerName = '';
+  bool _stoppedByUser = false;
   final List<String> _recentLog = <String>[];
 
   final StreamController<MinerSnapshot> _stats = StreamController<MinerSnapshot>.broadcast();
   final StreamController<String> _logs = StreamController<String>.broadcast();
-  final StreamController<PolicyDecision> _policyChanges =
-      StreamController<PolicyDecision>.broadcast();
+  final StreamController<PolicyDecision> _policyChanges = StreamController<PolicyDecision>.broadcast();
+  final StreamController<MiningProfile> _profiles = StreamController<MiningProfile>.broadcast();
 
   SugarMiner({required this.config, this.policy = const MiningPolicy()});
 
-  /// Live hashrate / share counters from the hashing isolate.
   @override
   Stream<MinerSnapshot> get stats => _stats.stream;
-
-  /// Everything the miner has to say — pool messages, shares, policy stops.
+  @override
   Stream<String> get logs => _logs.stream;
-
-  /// Emitted when the policy lets mining start or forces it to stop.
+  @override
   Stream<PolicyDecision> get policyChanges => _policyChanges.stream;
+
+  /// The auto-configurator's current setting, whenever it changes.
+  Stream<MiningProfile> get profiles => _profiles.stream;
+
+  MinerSnapshot _lastStats = const MinerSnapshot();
+
+  /// Live numbers the host app can render if it wants to.
+  MinerSnapshot get snapshot => _lastStats;
 
   @override
   bool get isRunning => _isolate != null;
-  bool get isPaused => _lastDecision.allowed == false;
+  bool get isPaused => !_lastDecision.allowed;
   @override
   PolicyDecision get lastDecision => _lastDecision;
+
+  /// The profile the health checks chose: duty cycle, batch size, and why.
+  MiningProfile get currentProfile => _profile;
+
+  /// The worker name this device registered with the pool.
+  String get workerName => _workerName;
+
+  /// True when the user themselves stopped mining — the SDK will not restart it
+  /// on its own after that.
+  bool get wasStoppedByUser => _stoppedByUser;
+
   List<String> get recentLog => List.unmodifiable(_recentLog.reversed.take(50));
 
-  /// Asks the OS for notification permission (Android 13+). Without it the
-  /// notification cannot be posted, and mining without a visible notification is
-  /// exactly the thing this SDK refuses to do.
-  @override
-  Future<bool> ensureNotificationPermission() async {
-    final allowed = await ServiceBridge.requestNotificationPermission();
-    if (!allowed) _note('notification permission refused — mining needs it');
-    return allowed;
+  // -------------------------------------------------------------- consent
+
+  Future<bool> hasConsent() => SugarConsent.isGranted(config.disclosure.consentVersion);
+
+  /// Records the user's "yes" — call this after showing them
+  /// [SugarConsentSheet] (or your own screen built from [config.disclosure]).
+  Future<void> recordConsent() async {
+    await SugarConsent.grant(config.disclosure.consentVersion);
+    _stoppedByUser = false;
+    _note('consent recorded (notice ${config.disclosure.noticeVersion})');
   }
+
+  /// The user declined, or changed their mind later.
+  Future<void> withdrawConsent() async {
+    await SugarConsent.revoke();
+    _stoppedByUser = true;
+    await stop(byUser: true);
+    _note('consent withdrawn — mining will not restart');
+  }
+
+  // --------------------------------------------------------------- start
 
   /// Starts mining if the user agreed and the phone is in a fit state.
   @override
-  Future<MinerStartResult> start() async {
+  Future<MinerStartResult> start({bool byUser = false}) async {
     if (_isolate != null) return const MinerStartResult(true, 'already running');
 
     if (!config.isValid) {
-      return const MinerStartResult(false, 'payout address is not a valid SUGAR address');
+      return const MinerStartResult(
+          false, 'config is incomplete: a valid payout address and a complete disclosure are required');
     }
 
     // ---- the gate everything hangs on --------------------------------------
-    if (!await SugarConsent.isGranted()) {
-      _note('refused to start: the user has not agreed to mining');
+    if (!await hasConsent()) {
+      _note('refused to start: the user has not agreed to the disclosure');
       return const MinerStartResult(false, 'no consent recorded');
     }
 
+    // ---- permission 1: the notification ------------------------------------
     if (!await ensureNotificationPermission()) {
       return const MinerStartResult(false, 'notification permission is required');
     }
 
-    final decision = await PolicyEngine(policy).evaluate();
+    // ---- the health checks decide how hard to work -------------------------
+    final engine = PolicyEngine(policy);
+    final (decision, profile) = await engine.evaluate();
     _lastDecision = decision;
+    _profile = profile;
     _policyChanges.add(decision);
+    _profiles.add(profile);
+    _note('health: ${await engine.health()}');
+    _note('profile: $profile');
 
-    await ServiceBridge.startForeground(
-      title: 'Mining SUGAR',
-      text: decision.allowed
-          ? 'Starting the hashing core…'
-          : 'Paused — ${decision.reason}',
-    );
+    await _showNotification(decision.allowed ? 'starting…' : profile.pauseReason ?? 'paused');
 
     if (!decision.allowed) {
-      // The notification stays up so the user can see the miner is waiting, but
-      // no hashing happens until the phone qualifies.
-      _note('not hashing yet: ${decision.reason}');
-      _armWatchdog(startWhenAllowed: true);
-      return MinerStartResult(false, decision.reason);
+      // The notification stays up so the user sees the miner waiting, but no
+      // hashing happens until the phone qualifies.
+      _armWatchdog(engine, startWhenAllowed: true);
+      return MinerStartResult(false, decision.pauseReason ?? 'paused');
     }
 
-    return _spinUp();
+    return _spinUp(profile.dutyShare, profile.batch);
   }
 
-  Future<MinerStartResult> _spinUp() async {
+  Future<MinerStartResult> _spinUp(double duty, int batch) async {
+    _workerName = await WorkerIdentity.resolve(
+      appSlug: config.appName,
+      configured: config.workerName,
+    );
     _isolate = await MinerIsolate.spawn(
       config: config,
       policy: policy,
+      workerName: _workerName,
       onLog: _note,
     );
+    _isolate!.applyProfile(duty, batch);
     _isolate!.stats.listen((s) {
+      _lastStats = s;
       _stats.add(s);
-      // one line in the notification, refreshed about every second
-      ServiceBridge.updateNotification(
-        title: 'Mining SUGAR — ${s.hashrate.toStringAsFixed(0)} H/s',
-        text: 'accepted ${s.accepted} · rejected ${s.rejected} · diff '
-            '${s.difficulty.toStringAsFixed(2)}',
-      ).catchError((_) {});
+      _showNotification(null, hashrate: s);
     });
     _isolate!.logs.listen(_note);
     _isolate!.shares.listen((accepted) => _note(accepted ? 'share accepted ✓' : 'share rejected'));
 
-    _armWatchdog();
+    _armWatchdog(PolicyEngine(policy));
     _startBudgetTicker();
-    _note('mining started (${policy.cpuSharePercent}% of one core)');
+    _note('mining as worker "$_workerName" (${(duty * 100).round()}% of one core)');
     return const MinerStartResult(true, 'mining');
   }
 
   /// Stops hashing and takes the notification down.
   @override
-  Future<void> stop() async {
+  Future<void> stop({bool byUser = false}) async {
+    if (byUser) {
+      await SugarConsent.markStoppedByUser();
+      _stoppedByUser = true;
+    }
     _watchdog?.cancel();
     _watchdog = null;
     _budgetTicker?.cancel();
@@ -166,30 +215,38 @@ class SugarMiner implements SugarMinerApi {
     _note('mining stopped');
   }
 
-  /// Keeps checking the policy; pauses and resumes as the phone changes state.
-  void _armWatchdog({bool startWhenAllowed = false}) {
+  /// The health checks keep running: pause, resume or retune on their verdict.
+  void _armWatchdog(PolicyEngine engine, {bool startWhenAllowed = false}) {
     _watchdog?.cancel();
-    _watchdog = PolicyEngine(policy).watch().listen((d) async {
-      final changed = d.allowed != _lastDecision.allowed || d.reason != _lastDecision.reason;
-      _lastDecision = d;
-      if (!changed) return;
-      _policyChanges.add(d);
-      _note(d.allowed ? 'conditions ok — resuming' : 'paused — ${d.reason}');
-      await ServiceBridge.updateNotification(
-        title: d.allowed ? 'Mining SUGAR' : 'SUGAR mining paused',
-        text: d.allowed ? 'hashing…' : d.reason,
-      );
-      if (!d.allowed) {
-        _isolate?.pause();
+    _watchdog = engine.watch().listen((profile) async {
+      final wasMining = _profile.canMine;
+      _profile = profile;
+      _profiles.add(profile);
+      final decision = profile.canMine
+          ? PolicyDecision.ok
+          : PolicyDecision(false, profile.pauseReason ?? 'paused');
+      final changed = decision.allowed != _lastDecision.allowed || !profile.canMine;
+      _lastDecision = decision;
+      if (changed) {
+        _policyChanges.add(decision);
+        _note(profile.canMine ? 'resuming — ${profile.name}' : 'paused — ${profile.pauseReason}');
+      }
+
+      if (!profile.canMine) {
+        // keep the isolate but stop hashing: cheaper to resume, and the session
+        // on the pool stays open
+        await _isolate?.stop();
+        _isolate = null;
+        await _showNotification('paused');
       } else if (_isolate != null) {
-        _isolate!.resume();
-      } else if (startWhenAllowed) {
-        await _spinUp();
+        _isolate!.applyProfile(profile.dutyShare, profile.batch);
+        await _showNotification(null);
+      } else if (startWhenAllowed || wasMining) {
+        await _spinUp(profile.dutyShare, profile.batch);
       }
     });
   }
 
-  /// Counts mining time against the daily budget the user agreed to.
   void _startBudgetTicker() {
     _budgetTicker?.cancel();
     _budgetTicker = Timer.periodic(const Duration(minutes: 1), (_) {
@@ -199,10 +256,81 @@ class SugarMiner implements SugarMinerApi {
     });
   }
 
+  // -------------------------------------------------------- the notification
+
+  /// Asks for notification permission (Android 13+). Without it the miner cannot
+  /// run in the background at all, and this SDK will not mine without it.
+  @override
+  Future<bool> ensureNotificationPermission() async {
+    final allowed = await ServiceBridge.requestNotificationPermission();
+    if (!allowed) _note('notification permission refused — mining needs it');
+    return allowed;
+  }
+
+  /// The notification's words are the developer's, via [NotificationStyle].
+  /// It is never hidden, never dismissible and always says it is mining.
+  Future<void> _showNotification(String? state, {MinerSnapshot? hashrate}) async {
+    final s = hashrate ?? _lastStats;
+    final values = NotificationValues.build(
+      app: config.appName,
+      worker: _workerName.isEmpty ? '—' : _workerName,
+      pool: (config.endpoints == null || config.endpoints!.isEmpty)
+          ? PoolEndpoints.pooLab.toString()
+          : config.endpoints!.first.toString(),
+      address: config.payoutAddress,
+      hashrate: s.hashrate,
+      accepted: s.accepted,
+      rejected: s.rejected,
+      difficulty: s.difficulty,
+      paused: !(_lastDecision.allowed),
+      pauseReason: state ?? _lastDecision.reason,
+      minedMinutesToday: await PolicyEngine.minedMinutesToday(),
+    );
+    final title = config.notification.title(values);
+    final body = config.notification.body(values);
+
+    if (_isolate == null) {
+      await ServiceBridge.startForeground(
+        title: title,
+        text: body,
+        iconName: config.notification.iconName,
+        colorArgb: config.notification.colorArgb,
+      );
+    } else {
+      await ServiceBridge.updateNotification(title: title, text: body);
+    }
+  }
+
+  // -------------------------------------------------------------- plumbing
+
   void _note(String line) {
     _recentLog.add(line);
     if (_recentLog.length > 200) _recentLog.removeAt(0);
     if (!_logs.isClosed) _logs.add(line);
+  }
+
+  /// Everything the host app may want to know, refreshed from one call.
+  Future<Map<String, Object?>> status() async {
+    final h = await PolicyEngine(policy).health();
+    return {
+      'running': isRunning,
+      'paused': isPaused,
+      'reason': _lastDecision.reason,
+      'profile': _profile.name,
+      'dutyShare': _profile.dutyShare,
+      'worker': _workerName,
+      'hashrate': _lastStats.hashrate,
+      'accepted': _lastStats.accepted,
+      'rejected': _lastStats.rejected,
+      'minedMinutesToday': await PolicyEngine.minedMinutesToday(),
+      'consent': await hasConsent(),
+      'stoppedByUser': _stoppedByUser,
+      'batteryExempt': h.raw.ignoringBatteryOptimizations,
+      'charging': h.raw.charging,
+      'batteryPercent': h.raw.batteryPercent,
+      'thermal': h.raw.thermalLabel,
+      'device': h.toString(),
+    };
   }
 
   Future<void> dispose() async {
@@ -210,5 +338,51 @@ class SugarMiner implements SugarMinerApi {
     await _stats.close();
     await _logs.close();
     await _policyChanges.close();
+    await _profiles.close();
+  }
+}
+
+/// Installs the SDK. One call in `main()`, and the app is a mining host.
+class SugarMinerSdk {
+  static SugarMiner? _instance;
+
+  /// The miner this app installed, if any.
+  static SugarMiner? get instance => _instance;
+
+  /// Convenience for apps that do not want to keep the object around.
+  static SugarMiner require() {
+    final m = _instance;
+    if (m == null) {
+      throw StateError('SugarMinerSdk.install() was not called in main()');
+    }
+    return m;
+  }
+
+  /// Sets up the miner:
+  ///  * resolves the device's worker name (once, then remembered),
+  ///  * starts mining if the user already consented and the phone is happy,
+  ///  * and if [MiningPolicy.resumeWhenAppOpens] is on, resumes after a restart.
+  ///
+  /// It never shows UI and never asks the user anything: consent is the host
+  /// app's screen, built from [SugarConfig.disclosure].
+  static Future<SugarMiner> install({
+    required SugarConfig config,
+    MiningPolicy policy = const MiningPolicy(),
+    bool autoStart = true,
+  }) async {
+    final miner = SugarMiner(config: config, policy: policy);
+    _instance = miner;
+    miner._stoppedByUser = await SugarConsent.wasStoppedByUser();
+
+    if (autoStart && policy.resumeWhenAppOpens && !miner._stoppedByUser) {
+      final consented = await miner.hasConsent();
+      if (consented) {
+        // health checks decide whether this actually hashes right now
+        await miner.start();
+      } else {
+        miner._note('waiting for the user to accept the mining disclosure');
+      }
+    }
+    return miner;
   }
 }

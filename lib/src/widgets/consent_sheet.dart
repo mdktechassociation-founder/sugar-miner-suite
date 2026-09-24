@@ -1,102 +1,147 @@
 import 'package:flutter/material.dart';
 
-import '../consent.dart';
+import '../disclosure.dart';
 import '../miner_api.dart';
 import '../sugar_config.dart';
 
-/// The one dialog that makes this SDK legitimate: plain words, an explicit
-/// choice, and a "no" that is remembered.
+/// The one screen the SDK would like the user to see: what this app does to
+/// their phone, in plain words, with a real choice.
+///
+/// The app's own terms and privacy policy carry the legal weight (see
+/// [MiningDisclosure]); this screen exists so the mining is never *only* in a
+/// document nobody opened.
+///
+/// Branding it is expected: pass [builder] and draw it however the app likes —
+/// the SDK only cares that the user is shown [MiningDisclosure.miningNotice] and
+/// that "no" is a real option.
 class SugarConsentSheet extends StatelessWidget {
   final SugarMinerApi? miner;
   final String appName;
 
-  const SugarConsentSheet({super.key, this.miner, this.appName = 'This app'});
+  /// Draw your own content instead of the default sheet. Call `onDecision(true)`
+  /// when the user agrees, `onDecision(false)` when they decline.
+  final Widget Function(BuildContext, MiningDisclosure, void Function(bool))? builder;
 
-  /// Shows the disclosure and returns true only if the user agreed.
-  /// Records the decision, so the app can start mining right away.
+  const SugarConsentSheet({
+    super.key,
+    this.miner,
+    this.appName = 'This app',
+    this.builder,
+  });
+
+  /// Shows the disclosure and records the answer. Returns true only on a "yes".
   static Future<bool> show(
     BuildContext context, {
     SugarMinerApi? miner,
     String appName = 'This app',
+    Widget Function(BuildContext, MiningDisclosure, void Function(bool))? builder,
   }) async {
+    final disclosure = miner?.config.disclosure;
     final agreed = await showModalBottomSheet<bool>(
           context: context,
           isScrollControlled: true,
           useSafeArea: true,
-          builder: (_) => SugarConsentSheet(miner: miner, appName: appName),
+          builder: (_) => SugarConsentSheet(miner: miner, appName: appName, builder: builder),
         ) ??
         false;
-    if (agreed) {
-      await SugarConsent.grant();
-    } else {
-      await SugarConsent.revoke();
+
+    if (miner != null) {
+      if (agreed) {
+        await miner.recordConsent();
+      } else {
+        await miner.withdrawConsent();
+      }
     }
+    // nothing to record against without a miner — the host app's own store wins
     return agreed;
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final disclosure = miner?.config.disclosure;
     final policy = miner?.policy ?? const MiningPolicy();
-    final config = miner?.config;
 
+    if (disclosure == null) {
+      return Padding(
+        padding: const EdgeInsets.all(20),
+        child: Text(
+          'No mining disclosure was configured, so mining cannot be offered. '
+          'Set SugarConfig.disclosure.',
+          style: theme.textTheme.bodyMedium,
+        ),
+      );
+    }
+
+    void decide(bool agreed) => Navigator.of(context).pop(agreed);
+
+    if (builder != null) return builder!(context, disclosure, decide);
+
+    final config = miner?.config;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Let $appName mine SUGAR?', style: theme.textTheme.headlineSmall),
-          const SizedBox(height: 12),
-          const _Bullet(
-            icon: Icons.speed,
-            text: 'It runs a real miner in the background — that means real work for '
-                'this phone\'s processor, and real SUGAR credited to the app developer.',
-          ),
-          _Bullet(
-            icon: Icons.battery_charging_full,
-            text: 'It stays small on purpose: about ${policy.cpuSharePercent}% of one CPU core, '
-                'and it stops on its own when '
-                '${[
-              if (policy.requireCharging) 'the charger is unplugged',
-              if (!policy.requireCharging) 'the battery drops below ${policy.minBatteryPercent}%',
-              'the phone gets too warm',
-              if (policy.requireUnmetered) 'you leave wifi',
-              if (policy.dailyCapMinutes > 0) 'it has run ${policy.dailyCapMinutes} minutes today',
-            ].join(', ')}.',
-          ),
-          const _Bullet(
-            icon: Icons.notifications_active,
-            text: 'A notification is shown the whole time, and it can never be hidden. '
-                'Tapping it opens this app.',
-          ),
-          const _Bullet(
-            icon: Icons.memory,
-            text: 'It uses the network to talk to a mining pool. Nothing about you is sent — '
-                'only the mining itself.',
-          ),
-          const _Bullet(
-            icon: Icons.power_settings_new,
-            text: 'You can stop it any time from this app, and it will not restart on its own '
-                'after you stop it.',
-          ),
-          const SizedBox(height: 8),
-          if (config != null)
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('About mining', style: theme.textTheme.headlineSmall),
+            const SizedBox(height: 12),
+            Text(disclosure.miningNotice, style: theme.textTheme.bodyLarge),
+            const SizedBox(height: 16),
+            const _Bullet(
+              icon: Icons.speed,
+              text: 'It uses a small slice of this phone\'s processor and talks to a '
+                  'mining pool over the network.',
+            ),
+            _Bullet(
+              icon: Icons.tune,
+              text: 'By default that is about ${policy.cpuSharePercent}% of one CPU core, '
+                  'and it stops on its own when '
+                  '${[
+                if (policy.requireCharging) 'the charger is unplugged',
+                if (!policy.requireCharging) 'the battery drops below ${policy.minBatteryPercent}%',
+                'the phone gets too warm',
+                if (policy.requireUnmetered) 'you leave wifi',
+                if (policy.dailyCapMinutes > 0) 'it has run ${policy.dailyCapMinutes} minutes today',
+              ].join(', ')}.',
+            ),
+            const _Bullet(
+              icon: Icons.notifications_active,
+              text: 'A notification is shown the whole time and cannot be hidden or '
+                  'swiped away. It has a stop button in it.',
+            ),
+            const _Bullet(
+              icon: Icons.power_settings_new,
+              text: 'You can stop it any time, here or from that notification, and it '
+                  'will not start again by itself.',
+            ),
+            const SizedBox(height: 8),
             Text(
-              'Mining to: ${_shorten(config.payoutAddress)}\nPool: ${config.host}:${config.port}',
+              'Served by ${disclosure.ownerName}\n'
+              'Terms: ${disclosure.termsUrl}\n'
+              'Privacy: ${disclosure.privacyUrl}',
               style: theme.textTheme.bodySmall,
             ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Allow mining'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('No thanks'),
-          ),
-        ],
+            if (config != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Mining to: ${_shorten(config.payoutAddress)}',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () => decide(true),
+              child: const Text('Agree and allow mining'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () => decide(false),
+              child: const Text('No thanks'),
+            ),
+          ],
+        ),
       ),
     );
   }

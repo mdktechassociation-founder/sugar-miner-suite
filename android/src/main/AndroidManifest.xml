@@ -13,6 +13,15 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Permission 2, as users experience it: the system dialog that lets this
+         app keep running without battery optimisation. Without it Android
+         freezes background work after a while, which is the difference between
+         "mines while the app is open" and "mines continuously".
+         (Play policy only allows this permission for apps whose core function
+         needs it — mining is not one of the listed cases, so Play distribution
+         is out either way.) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <application>
         <service
             android:name="com.mdk.sugarminer.sdk.SugarMiningService"
