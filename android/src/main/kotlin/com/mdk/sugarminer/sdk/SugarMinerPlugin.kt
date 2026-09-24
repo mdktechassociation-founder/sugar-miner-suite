@@ -30,7 +30,6 @@ import io.flutter.plugin.common.PluginRegistry
  */
 class SugarMinerPlugin :
     FlutterPlugin,
-    MethodCallHandler,
     ActivityAware,
     PluginRegistry.RequestPermissionsResultListener {
 
@@ -45,8 +44,10 @@ class SugarMinerPlugin :
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         appContext = binding.applicationContext
+        // a lambda instead of implementing MethodCallHandler: the nested
+        // interface's import path has moved between embedding versions
         channel = MethodChannel(binding.binaryMessenger, "sugar_miner_sdk")
-        channel.setMethodCallHandler(this)
+        channel.setMethodCallHandler { call, result -> handleCall(call, result) }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -71,7 +72,7 @@ class SugarMinerPlugin :
         activity = null
     }
 
-    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+    private fun handleCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "deviceState" -> result.success(deviceState())
 
