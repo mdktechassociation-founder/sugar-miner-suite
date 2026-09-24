@@ -23,3 +23,7 @@ native/yespower/*.dylib
 tools/live_test.log
 
 .DS_Store
+
+# python
+__pycache__/
+*.pyc
