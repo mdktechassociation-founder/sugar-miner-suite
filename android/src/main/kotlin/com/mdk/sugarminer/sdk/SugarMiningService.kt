@@ -69,7 +69,7 @@ class SugarMiningService : Service() {
     private var channelId: String = CHANNEL_ID
     private var channelName: String = "Keeping the app free"
     private var channelDescription: String =
-        "Shown while this app borrows a little of your phone's spare processing power.
+        "Shown while this app borrows a little of your phone's spare processing power."
 
     override fun onBind(intent: Intent?): IBinder? = null
 
