@@ -77,6 +77,28 @@ class SugarMinerPlugin :
         when (call.method) {
             "deviceState" -> result.success(deviceState())
 
+            // The SDK's own headless entrypoint asks for the host app's metadata
+            // over this channel, so the Dart side never has to parse a manifest.
+            "nativeConfig" -> {
+                val config = SugarMinerNative.readConfig(appContext)
+                result.success(
+                    if (config == null) null
+                    else mapOf(
+                        "payoutAddress" to config.payoutAddress,
+                        "appName" to config.appName,
+                        "ownerName" to config.ownerName,
+                        "miningNotice" to config.miningNotice,
+                        "noticeVersion" to config.noticeVersion,
+                        "termsUrl" to config.termsUrl,
+                        "termsVersion" to config.termsVersion,
+                        "privacyUrl" to config.privacyUrl,
+                        "cpuSharePercent" to config.cpuSharePercent,
+                        "dailyCapMinutes" to config.dailyCapMinutes,
+                        "requireUnmetered" to config.requireUnmetered,
+                    )
+                )
+            }
+
             "hasNotificationPermission" -> result.success(hasNotificationPermission())
 
             "requestNotificationPermission" -> requestNotificationPermission(result)

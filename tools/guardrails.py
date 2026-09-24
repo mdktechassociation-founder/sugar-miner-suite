@@ -232,6 +232,39 @@ def main():
     check('the restart promise the app shows the user is computed, not hard-coded',
           'restartBehaviour' in sdk and 'restartBehaviour' in headless_dart)
 
+    # ── 10b. the "no Dart" native path is held to the same rules ───────────
+    native = code('android/src/main/kotlin/com/mdk/sugarminer/sdk/SugarMinerNative.kt')
+    boot_dart = code('lib/src/native_boot.dart')
+
+    check('the native installer shows its own consent dialog before anything runs',
+          'AlertDialog' in native and 'Agree and start' in native and 'No thanks' in native,
+          'an app that writes no Dart still has to ask its user, in words')
+    check('the native consent writes the same key and version the Dart store reads',
+          'PREF_CONSENT_GRANTED' in native
+          and 'flutter.sugar_sdk_consent_version' in native
+          and '"$noticeVersion|terms:$termsVersion|privacy:$privacyUrl"' in native,
+          'two stores with two ideas of "the user agreed" is how consent gets lost')
+    native_start = body_after(native, 'private fun startMining', 1200)
+    check('the native path cannot start mining without a recorded consent',
+          'consentRecorded(context, config.consentVersion)' in native_start
+          and 'return' in native_start,
+          'startMining() must re-check the prefs, not trust its caller')
+    check('the native path refuses to mine without notification permission',
+          'POST_NOTIFICATIONS' in native_start and 'PERMISSION_GRANTED' in native_start
+          and 'return' in native_start,
+          'silent mining is the one thing this SDK never does, native path included')
+    check('a native "no thanks" is recorded and not asked again',
+          'consent_refused' in native and 'fun refused(' in native)
+    check('metadata that is missing or unusable stops the installer dead',
+          'return null' in native and 'notice.length < 40' in native,
+          'no address and no real notice means no mining, not a guess')
+    check('the SDK entrypoint refuses without a valid payout address',
+          'sugar1|tugar1' in boot_dart and 'return null' in boot_dart)
+    check('the SDK entrypoint carries the tree-shake guard',
+          '@pragma(\'vm:entry-point\')' in read('lib/src/native_boot.dart'))
+    check('the native installer can stop mining for good, and does',
+          'fun stop(' in native and 'cancelReArm' in native and 'ACTION_STOP_BY_USER' in native)
+
     # ── 11. the example can be trusted as documentation ────────────────────
     check('the example shows no user-facing mining configuration',
           '_address' not in example and 'TextField' not in example,

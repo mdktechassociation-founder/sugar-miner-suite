@@ -30,6 +30,37 @@ object HeadlessMinerEngine {
 
     fun isRunning(): Boolean = engine != null
 
+    /**
+     * Starts a known entrypoint by name — used by [SugarMinerNative], which calls
+     * the SDK's own Dart entrypoint rather than a callback the app registered.
+     *
+     * The library path points inside this package, which works because the SDK's
+     * Dart is compiled into the app's snapshot as soon as the app imports it
+     * (`package:sugar_miner_sdk/native_boot.dart`).
+     */
+    @Synchronized
+    fun startNamed(context: Context, callbackName: String, libraryPath: String) {
+        if (engine != null || starting) return
+        val appContext = context.applicationContext
+        starting = true
+        try {
+            val loader = FlutterInjector.instance().flutterLoader()
+            loader.startInitialization(appContext)
+            loader.ensureInitializationComplete(appContext, null)
+            val entrypoint = DartExecutor.DartEntrypoint(
+                loader.findAppBundlePath(), callbackName, libraryPath
+            )
+            val newEngine = FlutterEngine(appContext)
+            registerPlugins(appContext, newEngine)
+            newEngine.dartExecutor.executeDartEntrypoint(entrypoint)
+            engine = newEngine
+        } catch (_: Exception) {
+            engine = null
+        } finally {
+            starting = false
+        }
+    }
+
     /** Starts the mining entrypoint, or does nothing if it is already up. */
     @Synchronized
     fun start(context: Context) {
