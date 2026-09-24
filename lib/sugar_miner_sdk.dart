@@ -24,20 +24,20 @@ library;
 
 import 'dart:async';
 
-import 'consent.dart';
-import 'miner/engine.dart';
-import 'miner_isolate.dart';
-import 'policy.dart';
-import 'service_bridge.dart';
-import 'sugar_config.dart';
+import 'src/consent.dart';
+import 'src/miner/engine.dart';
+import 'src/miner_isolate.dart';
+import 'src/policy.dart';
+import 'src/service_bridge.dart';
+import 'src/sugar_config.dart';
 
-export 'consent.dart';
-export 'miner/engine.dart' show MinerSnapshot, ShareFound, hashesPerShare;
-export 'policy.dart';
-export 'service_bridge.dart';
-export 'sugar_config.dart';
-export 'widgets/consent_sheet.dart';
-export 'widgets/mining_tile.dart';
+export 'src/consent.dart';
+export 'src/miner/engine.dart' show MinerSnapshot, ShareFound, hashesPerShare;
+export 'src/policy.dart';
+export 'src/service_bridge.dart';
+export 'src/sugar_config.dart';
+export 'src/widgets/consent_sheet.dart';
+export 'src/widgets/mining_tile.dart';
 
 /// The whole public surface: configure once, then [start] / [stop] / [dispose].
 class SugarMiner implements SugarMinerLike {
