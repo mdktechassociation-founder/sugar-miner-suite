@@ -126,7 +126,14 @@ def main():
     check('the example sets the owner address in code',
           'kPayoutAddress' in example and 'String.fromEnvironment' in example)
 
-    # ── 4. the disclosure is mandatory and readable ────────────────────────
+    # ── 4. the disclosure is mandatory and readable, and speaks human ───────
+    check('there is a ready-made "free app, in exchange for spare power" wording',
+          'MiningDisclosure.donation' in disc,
+          'the common case deserves plain words, not a constructor to fill in')
+    check('the consent screen shows who benefits, not a wallet string',
+          'payoutAddress' not in code('lib/src/widgets/consent_sheet.dart')
+          and 'Mining to' not in read('lib/src/widgets/consent_sheet.dart'),
+          'the user is deciding whether to lend spare power, not auditing a rig')
     check('the disclosure requires a mining notice, terms and a privacy policy',
           all(k in disc for k in ['miningNotice', 'termsUrl', 'privacyUrl', 'ownerName', 'termsVersion']))
     check('a one-line "we mine" is not enough of a notice',
@@ -154,9 +161,27 @@ def main():
     # ── 6. the notification exists always, its words are the developer's ───
     check('notification text is configurable by the developer',
           'titleTemplate' in style and 'bodyTemplate' in style)
+    check("the notification channel is the app's own branding",
+          all(k in style for k in ['channelId', 'channelName', 'channelDescription']),
+          'the user should see the app in notification settings, not this library')
     check('the default notification wording mentions mining', 'mining' in style.lower())
+    defaults = style[style.index('const NotificationStyle({'):]
+    defaults = defaults[:defaults.index('});')]
+    check('the default wording carries no mining arithmetic',
+          not any(j in defaults
+                  for j in ['{hashrate}', 'H/s', '{diff}', '{accepted}', '{worker}', 'pool']),
+          'no hashrate / pool / share counters in front of the user by default')
     check('there is no way to hide, delay or silence it',
           not any(k in style.lower() for k in ['hidden', 'silent', 'importance', 'dismiss', 'delay']))
+    check('the bridge exposes no importance/ongoing/silent switch',
+          not any(k in bridge.lower() for k in ["'importance'", "'ongoing'", "'silent'", "'priority'"]),
+          'those are the three facts that make this legal, so they are not parameters')
+    check('the Android channel importance is fixed at DEFAULT',
+          'IMPORTANCE_DEFAULT' in service
+          and 'IMPORTANCE_MIN' not in service
+          and 'IMPORTANCE_NONE' not in service
+          and 'IMPORTANCE_LOW' not in service,
+          'never MIN/NONE/LOW, whatever the host app asks for')
     check('the notification is ongoing — it cannot be swiped away', 'setOngoing(true)' in service)
     check('the notification channel is IMPORTANCE_DEFAULT or higher',
           'NotificationManager.IMPORTANCE_DEFAULT' in service)

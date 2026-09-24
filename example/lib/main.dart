@@ -26,32 +26,26 @@ const kConfig = SugarConfig(
   // Worker name is left null on purpose: the SDK names the device itself
   // (sweetwidgets-android-1a2b) and remembers it, so the owner's pool worker
   // list is readable with zero configuration.
-  disclosure: const MiningDisclosure(
+  // The whole disclosure is one factory call: the "free app, in exchange for
+  // spare computing power" deal, in words a person can read.
+  disclosure: MiningDisclosure.donation(
     appName: 'Sweet Widgets',
     ownerName: 'Sweet Widgets Ltd',
-    miningNotice:
-        'While Sweet Widgets is installed, it mines a small amount of SUGAR '
-        'cryptocurrency in the background for the developer. This uses a slice of '
-        'your phone\'s processor, some battery and some network data. It is shown '
-        'in a notification while it runs, and you can turn it off at any time.',
-    noticeVersion: '1.0.0',
     termsUrl: 'https://example.com/sweetwidgets/terms',
     termsVersion: '2026-01-15',
     privacyUrl: 'https://example.com/sweetwidgets/privacy',
+    extraLine: 'Widgets, themes and sync are all included either way — mining only '
+        'keeps the lights on.',
+  ),
+  // The notification is the app's own: its words, its icon, its channel. The
+  // defaults are already plain; this shows how far you can take it.
+  notification: const NotificationStyle(
+    titleTemplate: 'Sweet Widgets · powered by you',
+    bodyTemplate: 'Thanks for keeping Sweet Widgets free.',
+    channelId: 'sweetwidgets_keep_free',
+    channelName: 'Keeping Sweet Widgets free',
   ),
 );
-
-/// The entrypoint Android calls after a reboot or an app update, with no activity
-/// on screen. Three lines, and mining carries on by itself — for a user who
-/// agreed to it and has not stopped it.
-///
-/// `@pragma('vm:entry-point')` is not optional: without it the function is
-/// tree-shaken out of release builds and registration returns false.
-@pragma('vm:entry-point')
-void sugarMinerHeadless() {
-  WidgetsFlutterBinding.ensureInitialized();
-  SugarMinerSdk.install(config: kConfig);
-}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

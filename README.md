@@ -10,6 +10,10 @@ worker, picks and fails over between pools, and decides how hard to work from th
 phone's own health checks. The user is asked once, sees a notification the whole
 time, and can stop it from the notification itself.
 
+The short version of what this is for: **the app is free, and the user pays with
+spare computing power instead of money.** The developer writes that deal down, the
+user agrees to it once, and the SDK does the rest quietly in the background.
+
 > Telugu/Tenglish guide: **[HOWTO-Telugu.md](HOWTO-Telugu.md)**
 > Permissions and what "24/7" really takes: **[PERMISSIONS.md](PERMISSIONS.md)**
 
@@ -137,16 +141,39 @@ SugarMiningTile(miner: SugarMinerSdk.require());
 Everything the profiler does is clamped to `MiningPolicy.cpuSharePercent`, and a
 guardrail test asserts that. Auto-config can only make it *gentler*, never greedier.
 
+## Who owns what
+
+| the app owns | the SDK owns |
+| --- | --- |
+| the payout address (set in code, never asked of the user) | that mining cannot start without a recorded agreement |
+| the disclosure: the free-app-for-spare-power sentence, terms, privacy policy | that a rebuilt disclosure (new notice version) asks the user again |
+| the notification's words, icon, colour, **and its Android channel** — so it carries your app's branding | that the notification exists, cannot be swiped away, and always has Stop |
+| your app's UI: the SDK draws nothing, ever | reading the phone's health and deciding how hard to mine |
+| whether to show hashrate / shares / worker anywhere (your call — see `status()`) | pausing for heat, battery, data, daily budget, and the user's stop |
+| the worker name, if you want a specific one | naming the device for you when you do not (`yourapp-android-1a2b`) |
+| the pool, if you want a specific one | choosing and failing over between pools when you do not |
+
+The user never sees pool names, hashrates, share counters or wallet strings from
+this SDK. Those are our business; their side of the deal is "you get the app free,
+we borrow a little spare power". The defaults say exactly that and nothing more.
+
 ## Notification: your words, our guarantees
 
 ```dart
 static const myStyle = NotificationStyle(
-  titleTemplate: '{app} · helping the network',
-  bodyTemplate: '{hashrate} H/s · {accepted} shares · {worker}',
+  titleTemplate: 'Sweet Widgets · powered by you',
+  bodyTemplate: 'Thanks for keeping Sweet Widgets free.',
   iconName: 'ic_my_badge',
   colorArgb: 0xFF1E88E5,
+  // your own channel: it shows under your app's name in Android's settings
+  channelId: 'sweetwidgets_keep_free',
+  channelName: 'Keeping Sweet Widgets free',
 );
 ```
+
+The placeholder set includes `{hashrate}`, `{accepted}`, `{pool}` and friends if you
+want them in a debug build — but the defaults deliberately use none of them. The
+person holding the phone gets plain language, or nothing but your brand.
 
 Placeholders: `{app} {worker} {hashrate} {accepted} {rejected} {diff} {state}
 {minutes} {pool} {address}`. What you cannot change: it is ongoing (not

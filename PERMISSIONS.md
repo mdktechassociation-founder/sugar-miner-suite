@@ -47,6 +47,13 @@ draw it yourself in your own design. Both paths record the same consent, and
 
 ### 2. Notifications (`POST_NOTIFICATIONS`)
 
+The notification is *your* app's — your words, your icon, your colour, and your own
+Android channel, so it sits under your app's name in the user's settings. The SDK's
+defaults are plain language with no mining arithmetic in them. What you cannot
+configure is whether it exists, how loud it is, or whether the user can dismiss it:
+those three are what keep this on the right side of the line, and there is no API
+for them anywhere in the SDK.
+
 Requested by the SDK the first time mining starts. Consequences of "no": the
 miner does not start at all. That is deliberate — mining without a visible
 notification is the thing that makes phone mining malware, so there is no

@@ -60,17 +60,30 @@ class ServiceBridge {
 
   // ---- the notification ---------------------------------------------------
 
+  /// Starts the mining notification. The look is entirely the caller's: icon,
+  /// colour, and the Android channel it lives in, so it carries the app's own
+  /// branding in the user's notification settings.
+  ///
+  /// There is deliberately no `importance`, `ongoing` or `silent` argument: the
+  /// notification has to exist and stay visible for the mining to be allowed, so
+  /// exposing a switch for it would be exposing a switch for malware.
   static Future<void> startForeground({
     required String title,
     required String text,
     String iconName = 'ic_sugar_miner',
     int colorArgb = 0,
+    String channelId = 'sugar_miner_sdk',
+    String channelName = 'Keeping the app free',
+    String channelDescription = '',
   }) =>
       _ch.invokeMethod<void>('startForeground', {
         'title': title,
         'text': text,
         'iconName': iconName,
         'colorArgb': colorArgb,
+        'channelId': channelId,
+        'channelName': channelName,
+        'channelDescription': channelDescription,
       });
 
   static Future<void> updateNotification({

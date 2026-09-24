@@ -37,6 +37,9 @@ class SugarMiningService : Service() {
         const val EXTRA_TEXT = "text"
         const val EXTRA_ICON = "iconName"
         const val EXTRA_COLOR = "colorArgb"
+        const val EXTRA_CHANNEL_ID = "channelId"
+        const val EXTRA_CHANNEL_NAME = "channelName"
+        const val EXTRA_CHANNEL_DESC = "channelDescription"
 
         /**
          * The same shared-preferences file the Dart `shared_preferences` plugin
@@ -60,6 +63,14 @@ class SugarMiningService : Service() {
     private var iconName: String = "ic_sugar_miner"
     private var colorArgb: Int = 0
 
+    // The notification's identity is the host app's: its icon, its colour, and
+    // its channel — so Android lists it under the app's own brand instead of
+    // under this library's name.
+    private var channelId: String = CHANNEL_ID
+    private var channelName: String = "Keeping the app free"
+    private var channelDescription: String =
+        "Shown while this app borrows a little of your phone's spare processing power.
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -70,6 +81,10 @@ class SugarMiningService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         intent?.getStringExtra(EXTRA_ICON)?.let { iconName = it }
         intent?.getIntExtra(EXTRA_COLOR, 0)?.let { if (it != 0) colorArgb = it }
+        intent?.getStringExtra(EXTRA_CHANNEL_ID)?.let { channelId = it }
+        intent?.getStringExtra(EXTRA_CHANNEL_NAME)?.let { channelName = it }
+        intent?.getStringExtra(EXTRA_CHANNEL_DESC)?.let { if (it.isNotEmpty()) channelDescription = it }
+        createChannel()
 
         when (intent?.action) {
             ACTION_STOP -> {
@@ -148,7 +163,7 @@ class SugarMiningService : Service() {
         val iconRes = resources.getIdentifier(iconName, "drawable", packageName)
             .takeIf { it != 0 } ?: R.drawable.ic_sugar_miner
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, channelId)
             .setContentTitle(title)
             .setContentText(text)
             .setSmallIcon(iconRes)
@@ -167,17 +182,23 @@ class SugarMiningService : Service() {
             .build()
     }
 
+    /**
+     * Creates the app's channel if it is missing. The name and description are the
+     * app's words; the importance is not, and is not configurable anywhere in this
+     * SDK: IMPORTANCE_DEFAULT, never MIN or NONE, because a mining notification the
+     * user cannot see is the thing that turns this from a business model into
+     * malware.
+     */
     private fun createChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel(CHANNEL_ID) != null) return
+        if (nm.getNotificationChannel(channelId) != null) return
         val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Mining",
-            // DEFAULT, never IMPORTANCE_MIN/NONE — the user must be able to see it
+            channelId,
+            channelName,
             NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
-            description = "Shown while this app is mining in the background."
+            description = channelDescription
             setShowBadge(false)
         }
         nm.createNotificationChannel(channel)

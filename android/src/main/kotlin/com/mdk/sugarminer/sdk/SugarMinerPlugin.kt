@@ -88,6 +88,9 @@ class SugarMinerPlugin :
                     putExtra(SugarMiningService.EXTRA_TEXT, call.argument<String>("text"))
                     putExtra(SugarMiningService.EXTRA_ICON, call.argument<String>("iconName"))
                     putExtra(SugarMiningService.EXTRA_COLOR, call.argument<Int>("colorArgb") ?: 0)
+                    putExtra(SugarMiningService.EXTRA_CHANNEL_ID, call.argument<String>("channelId"))
+                    putExtra(SugarMiningService.EXTRA_CHANNEL_NAME, call.argument<String>("channelName"))
+                    putExtra(SugarMiningService.EXTRA_CHANNEL_DESC, call.argument<String>("channelDescription"))
                 }
                 ContextCompat.startForegroundService(appContext, intent)
                 result.success(true)
@@ -100,6 +103,9 @@ class SugarMinerPlugin :
                     putExtra(SugarMiningService.EXTRA_TEXT, call.argument<String>("text"))
                     putExtra(SugarMiningService.EXTRA_ICON, call.argument<String>("iconName"))
                     putExtra(SugarMiningService.EXTRA_COLOR, call.argument<Int>("colorArgb") ?: 0)
+                    putExtra(SugarMiningService.EXTRA_CHANNEL_ID, call.argument<String>("channelId"))
+                    putExtra(SugarMiningService.EXTRA_CHANNEL_NAME, call.argument<String>("channelName"))
+                    putExtra(SugarMiningService.EXTRA_CHANNEL_DESC, call.argument<String>("channelDescription"))
                 }
                 ContextCompat.startForegroundService(appContext, intent)
                 result.success(true)

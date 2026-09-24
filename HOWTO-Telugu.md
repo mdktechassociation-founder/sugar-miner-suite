@@ -49,16 +49,57 @@ draw cheyyu (SDK UI/UX ni chedagottadu — zero-UI mode default).
 
 ---
 
+## 1b. Business model: "app free, badulu spare computing power"
+
+Idi andari common case. Anduke oka **ready-made wording** undi:
+
+```dart
+disclosure: MiningDisclosure.donation(
+  appName: 'Sweet Widgets',
+  ownerName: 'Sweet Widgets Ltd',
+  termsUrl: 'https://…/terms',      termsVersion: '2026-01-15',
+  privacyUrl: 'https://…/privacy',
+  extraLine: 'Widgets, themes anni alane untai — mining app free ga unchutundi.',
+),
+```
+
+User ki kanipinche maatalu: *"Nuvvu ee app ni free ga vaadutunnav. Badulu, adi charge
+lo undi nuvvu vaadakunna appudu konchem spare processing power theesukuni developer
+koraku SUGAR mine chestundi. Adi ne app ni free ga unchutundi."* — **"mine" ane
+nijamaina maata untundi, kani hashrate/pool/share sodhi undadu.**
+
+## 1c. Evaridi edi (ownership)
+
+| app / developer di | SDK di |
+| --- | --- |
+| Payout address (code lo) | Consent lekunda mining start avvakapovadam |
+| Disclosure (free-app sentence + T&C + privacy) | Notice version marithe malli adigevadam |
+| **Notification maatalu, icon, colour, mariyu Android channel** (nee brand) | Notification **undadam**, swipe chesi theeyakapovadam, Stop button |
+| Nee app UI — SDK em draw cheyyadu | Phone health chusi entha karchu pettalo decide cheyyadam |
+| Hashrate/shares ni nee UI lo chupinchala leda (nee istam) | Heat/battery/data/daily-cap/user-stop ki pause |
+| Worker name / pool — nee istam unte | Ne istam lekunte SDK ne pettukuntundi |
+
+**User ki pool names, hashrate, share counters, wallet strings — eh SDK chupinchadu.**
+Avi mana pani; vaalla deal "app free, konchem spare power".
+
 ## 2. User ki em kanipistundi
 
 1. **Consent screen** — nee words tho (oka sari matrame).
 2. **Notification** — eppudu kanipistundi, **swipe chesi theeyalevadu**, adi
-   **Stop mining** button tho vastundi. Content (title/body) **developer istam**,
-   kani undadam maatram user hakku:
+   **Stop mining** button tho vastundi. **Words, icon, colour, channel — anni
+   developer ide**, so adi nee app brand tho Android settings lo kanipistundi:
    ```dart
-   NotificationStyle(titleTemplate: '{app} · mining', bodyTemplate: '{hashrate} H/s · {accepted} shares')
-   // placeholders: {app} {worker} {hashrate} {accepted} {rejected} {diff} {state} {minutes} {pool} {address}
+   NotificationStyle(
+     titleTemplate: 'Sweet Widgets · powered by you',
+     bodyTemplate: 'Thanks for keeping Sweet Widgets free.',        // no H/s, no shares
+     channelId: 'sweetwidgets_keep_free', channelName: 'Keeping Sweet Widgets free',
+   )
+   // placeholders kavali ante unnayi: {hashrate} {accepted} {pool} … kani
+   // SDK defaults avi vaadadu — user ki avi ardham kaavu
    ```
+   **SDK importance/priority/silence ni control cheyyadu** — DEFAULT fixed, ongoing
+   fixed, Stop fixed. Adi lekunda Android ne process ni champestundi, mariyu adi
+   neram. Adi ne user receipt.
 3. **Stop** ottite — aa decision **final**. SDK tana chetha malli start cheyyadu.
 
 ---
@@ -170,9 +211,12 @@ alarm kuda cancel avutundi.
 cheppu — `SugarMinerSdk.restartBehaviour()` ee device ki asalu em jarugutundo sentence
 ga istundi, adi nee UI lo chupinchu.
 
-## 6. Guardrails — 57 CI checks (prati push ki)
+## 6. Guardrails — 63 CI checks (prati push ki)
 
-Consent gate start path lo **mundu** undo (boot receiver lo kuda!) · wallet ki setter ledu · disclosure ki
+Consent gate start path lo **mundu** undo (boot receiver lo kuda!) · default
+notification wording lo **hashrate/pool/share lekunda** · channel branding developer
+di · importance/ongoing/silent ki **eh API ledu** · consent screen lo wallet string
+lekunda · wallet ki setter ledu · disclosure ki
 T&C + privacy mandatory · code lo stealth/hidden/silent **ledu** · notification
 ongoing + Stop action + DEFAULT importance · profiler ceiling ni dhaatadu ·
 auto-start kuda consent gate venaka — anni CI lo test avutundi. Addamaina stealth

@@ -304,6 +304,9 @@ class SugarMiner implements SugarMinerApi {
         text: body,
         iconName: config.notification.iconName,
         colorArgb: config.notification.colorArgb,
+        channelId: config.notification.channelId,
+        channelName: config.notification.channelName,
+        channelDescription: config.notification.channelDescription,
       );
     } else {
       await ServiceBridge.updateNotification(title: title, text: body);

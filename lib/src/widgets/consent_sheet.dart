@@ -76,7 +76,6 @@ class SugarConsentSheet extends StatelessWidget {
 
     if (builder != null) return builder!(context, disclosure, decide);
 
-    final config = miner?.config;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       child: SingleChildScrollView(
@@ -90,8 +89,8 @@ class SugarConsentSheet extends StatelessWidget {
             const SizedBox(height: 16),
             const _Bullet(
               icon: Icons.speed,
-              text: 'It uses a small slice of this phone\'s processor and talks to a '
-                  'mining pool over the network.',
+              text: 'It uses a small slice of your phone\'s processor and a little '
+                  'network data.',
             ),
             _Bullet(
               icon: Icons.tune,
@@ -116,19 +115,15 @@ class SugarConsentSheet extends StatelessWidget {
                   'will not start again by itself.',
             ),
             const SizedBox(height: 8),
+            // Who benefits, and the documents. No wallet strings, no pool names,
+            // no mining arithmetic: the user is deciding whether to lend spare
+            // power, not auditing a rig.
             Text(
-              'Served by ${disclosure.ownerName}\n'
-              'Terms: ${disclosure.termsUrl}\n'
+              'Mining for ${disclosure.ownerName}\n'
+              'Terms: ${disclosure.termsUrl} (v${disclosure.termsVersion})\n'
               'Privacy: ${disclosure.privacyUrl}',
               style: theme.textTheme.bodySmall,
             ),
-            if (config != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                'Mining to: ${_shorten(config.payoutAddress)}',
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
             const SizedBox(height: 16),
             FilledButton(
               onPressed: () => decide(true),
@@ -145,8 +140,6 @@ class SugarConsentSheet extends StatelessWidget {
     );
   }
 
-  static String _shorten(String a) =>
-      a.length <= 18 ? a : '${a.substring(0, 10)}…${a.substring(a.length - 6)}';
 }
 
 class _Bullet extends StatelessWidget {

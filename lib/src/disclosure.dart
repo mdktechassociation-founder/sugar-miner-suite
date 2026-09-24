@@ -40,6 +40,41 @@ class MiningDisclosure {
     required this.privacyUrl,
   });
 
+  /// The "free app, in exchange for spare computing power" framing, which is
+  /// what most apps using this SDK actually mean:
+  ///
+  /// > You use the app for free. In exchange it borrows a little of your phone's
+  /// > spare processing power, while it is charging and not busy, to mine SUGAR
+  /// > for the developer. That is what keeps the app free.
+  ///
+  /// It says "mine", because the user deserves the real word, and it says "free",
+  /// because that is the deal they are getting. Everything else — pool, hashrate,
+  /// shares — is our business, not theirs.
+  factory MiningDisclosure.donation({
+    required String appName,
+    required String ownerName,
+    required String termsUrl,
+    required String termsVersion,
+    required String privacyUrl,
+    String noticeVersion = '1.0.0',
+    String? extraLine,
+  }) =>
+      MiningDisclosure(
+        appName: appName,
+        ownerName: ownerName,
+        miningNotice:
+            'You use $appName for free. In exchange, it borrows a small amount of your '
+            'phone\'s spare processing power while it is charging and you are not using '
+            'it, to mine SUGAR cryptocurrency for $ownerName. That is what keeps the app '
+            'free. It shows a notification while it runs, and you can switch it off at '
+            'any time.'
+            '${extraLine == null ? '' : '\n\n$extraLine'}',
+        noticeVersion: noticeVersion,
+        termsUrl: termsUrl,
+        termsVersion: termsVersion,
+        privacyUrl: privacyUrl,
+      );
+
   /// Everything the SDK needs for a consent record is present and non-empty.
   bool get isComplete =>
       appName.trim().isNotEmpty &&
