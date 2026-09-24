@@ -29,7 +29,7 @@ import 'dart:async';
 
 import 'src/auto_config.dart';
 import 'src/consent.dart';
-import 'src/headless.dart';
+import 'src/headless.dart' as headless;
 import 'src/miner/engine.dart';
 import 'src/miner_isolate.dart';
 import 'src/miner_api.dart';
@@ -373,12 +373,12 @@ class SugarMinerSdk {
   /// (it is tree-shaken out of release builds). In that case mining simply does
   /// not resume on its own — the SDK never pretends otherwise.
   static Future<bool> registerHeadlessEntrypoint(Function entrypoint) =>
-      HeadlessEntrypoint.register(entrypoint);
+      headless.HeadlessEntrypoint.register(entrypoint);
 
   /// An honest one-liner for the app's own UI: what happens to mining when the
   /// app is closed or the phone is restarted.
   static Future<String> restartBehaviour({MiningPolicy policy = const MiningPolicy()}) =>
-      restartBehaviour(policy: policy);
+      headless.restartBehaviour(policy: policy);
 
   /// The miner this app installed, if any.
   static SugarMiner? get instance => _instance;
