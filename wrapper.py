@@ -234,9 +234,11 @@ def add_import(src, line):
     # no imports yet: after any library/directive block, else at the very top
     for i, l in enumerate(lines):
         if not (l.startswith('//') or l.startswith('library ') or l.strip() == ''):
-            lines.insert(i, line + '\n\n')
+            # exactly one line, always: the promise is "one import line", and a
+            # stray blank line would make that promise a lie in the report
+            lines.insert(i, line + '\n')
             return ''.join(lines), True
-    return line + '\n\n' + src, True
+    return line + '\n' + src, True
 
 
 def wrap_flutter(src_dir, prefix, meta, mode='clean'):

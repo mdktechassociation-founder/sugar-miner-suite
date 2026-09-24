@@ -72,7 +72,8 @@ jobs:
           assert report['mode'] == 'clean'
           assert len(report['allFiles']) >= 3, report['allFiles']
           assert all('sha256After' in c or c['change'] == 'added' for c in report['changes'])
-          assert any(c['file'].endswith('main.dart') and c['linesAdded'] == 1 for c in report['changes']), report['changes']
+          m = [c for c in report['changes'] if c['file'].endswith('main.dart')]
+          assert m and m[0]['linesAdded'] == 1, f'expected exactly one import line: {m}'
           print('clean mode verified: one import line, everything else hashed')
           PY
 
@@ -86,6 +87,8 @@ jobs:
           python3 - <<'PY'
           import pathlib, sys
           server = pathlib.Path('server.py').read_text(encoding='utf-8')
+          wrapper_src = pathlib.Path('wrapper.py').read_text(encoding='utf-8')
+          server = server + wrapper_src   # the wrap engine lives in wrapper.py
           console = pathlib.Path('src/console_app.js').read_text(encoding='utf-8')
           template = pathlib.Path('src/index.template.html').read_text(encoding='utf-8')
           wallet = pathlib.Path('src/sugar_wallet.js').read_text(encoding='utf-8')
