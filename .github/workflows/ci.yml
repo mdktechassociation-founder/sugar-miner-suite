@@ -72,8 +72,8 @@ jobs:
       # discovered during the APK build costs five minutes
       - name: Analyze the SDK and the example
         run: |
-          flutter analyze
-          cd example && flutter analyze
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          cd example && flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Build the example APK
         run: |

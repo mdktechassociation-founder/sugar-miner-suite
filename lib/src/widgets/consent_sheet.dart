@@ -36,7 +36,6 @@ class SugarConsentSheet extends StatelessWidget {
     String appName = 'This app',
     Widget Function(BuildContext, MiningDisclosure, void Function(bool))? builder,
   }) async {
-    final disclosure = miner?.config.disclosure;
     final agreed = await showModalBottomSheet<bool>(
           context: context,
           isScrollControlled: true,

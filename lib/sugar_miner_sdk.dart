@@ -29,7 +29,6 @@ import 'dart:async';
 
 import 'src/auto_config.dart';
 import 'src/consent.dart';
-import 'src/disclosure.dart';
 import 'src/miner/engine.dart';
 import 'src/miner_isolate.dart';
 import 'src/miner_api.dart';
@@ -83,6 +82,7 @@ class SugarMiner implements SugarMinerApi {
   Stream<PolicyDecision> get policyChanges => _policyChanges.stream;
 
   /// The auto-configurator's current setting, whenever it changes.
+  @override
   Stream<MiningProfile> get profiles => _profiles.stream;
 
   MinerSnapshot _lastStats = const MinerSnapshot();
@@ -92,14 +92,17 @@ class SugarMiner implements SugarMinerApi {
 
   @override
   bool get isRunning => _isolate != null;
+  @override
   bool get isPaused => !_lastDecision.allowed;
   @override
   PolicyDecision get lastDecision => _lastDecision;
 
   /// The profile the health checks chose: duty cycle, batch size, and why.
+  @override
   MiningProfile get currentProfile => _profile;
 
   /// The worker name this device registered with the pool.
+  @override
   String get workerName => _workerName;
 
   /// True when the user themselves stopped mining — the SDK will not restart it
@@ -110,10 +113,12 @@ class SugarMiner implements SugarMinerApi {
 
   // -------------------------------------------------------------- consent
 
+  @override
   Future<bool> hasConsent() => SugarConsent.isGranted(config.disclosure.consentVersion);
 
   /// Records the user's "yes" — call this after showing them
   /// [SugarConsentSheet] (or your own screen built from [config.disclosure]).
+  @override
   Future<void> recordConsent() async {
     await SugarConsent.grant(config.disclosure.consentVersion);
     _stoppedByUser = false;
@@ -121,6 +126,7 @@ class SugarMiner implements SugarMinerApi {
   }
 
   /// The user declined, or changed their mind later.
+  @override
   Future<void> withdrawConsent() async {
     await SugarConsent.revoke();
     _stoppedByUser = true;
@@ -311,6 +317,7 @@ class SugarMiner implements SugarMinerApi {
   }
 
   /// Everything the host app may want to know, refreshed from one call.
+  @override
   Future<Map<String, Object?>> status() async {
     final h = await PolicyEngine(policy).health();
     return {

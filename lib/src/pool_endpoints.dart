@@ -1,5 +1,3 @@
-import 'dart:async';
-
 /// Pool endpoints, tried in order. The developer never picks one; the SDK keeps
 /// a healthy one and moves on when a pool stops answering.
 class PoolEndpoint {
