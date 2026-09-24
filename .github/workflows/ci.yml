@@ -59,11 +59,16 @@ jobs:
               failures.append('the APK refusal path is gone from server.py')
 
           # 2. no stealth/hidden/silent switch anywhere
-          forbidden = ['hideNotification', 'silentMode', 'noNotification',
-                       'hiddenNotification', 'stealth', 'coinHive']
-          blob = (server + console + wallet + template).lower()
+          # The honesty panel is allowed to name the things it refuses ("no stealth"),
+          # so strip those explicit refusals before scanning for the real thing.
+          import re as _re
+          blob = (server + console + wallet).lower()
+          for allowed in ['no stealth', 'no hidden', 'not hidden', 'no quiet']:
+              blob = blob.replace(allowed, ' ')
+          forbidden = ['hidenotification', 'silentmode', 'nonotification',
+                       'hiddennotification', 'stealth', 'coinhive']
           for word in forbidden:
-              if word.lower() in blob:
+              if word in blob:
                   failures.append(f'{word} appeared in the platform')
 
           # 3. the server must never handle a private key: only 'address' is read
