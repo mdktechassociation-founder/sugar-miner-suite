@@ -46,8 +46,7 @@
         <!-- the foreground service that keeps Dart (and therefore mining) alive -->
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:foregroundServiceType="dataSync|specialUse"
-            android:exported="false">
+            android:foregroundServiceType="dataSync|specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="continuous CPU mining (yespowerSUGAR) on behalf of the user" />
