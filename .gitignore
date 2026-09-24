@@ -1,0 +1,26 @@
+# Dart / Flutter
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+**/generated_plugin_registrant.dart
+
+# Android
+android/local.properties
+example/android/local.properties
+.gradle/
+**/.gradle/
+**/.cxx/
+**/build/
+*.iml
+.idea/
+
+# native build output
+native/yespower/*.so
+native/yespower/*.o
+
+# python
+__pycache__/
+*.pyc
+tools/live_test.log

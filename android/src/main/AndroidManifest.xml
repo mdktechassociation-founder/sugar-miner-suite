@@ -1,0 +1,26 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Merged into the host app: the app does not have to declare any of this. -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- mining in the background is the whole point of this library -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Android 14+ foreground services must declare a type. specialUse is used
+         instead of dataSync because Android 15 caps dataSync at 6 hours a day,
+         which would silently switch mining off overnight. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application>
+        <service
+            android:name="com.mdk.sugarminer.sdk.SugarMiningService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Consented CPU mining (yespowerSUGAR) for this app's developer, run only with the device owner's permission and always shown in a notification." />
+        </service>
+    </application>
+</manifest>
