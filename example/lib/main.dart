@@ -21,7 +21,7 @@ const kPayoutAddress = String.fromEnvironment(
   defaultValue: 'sugar1qus77d87shruj92sha2008u8kpnwxrehsdwkc69',
 );
 
-const kConfig = SugarConfig(
+final kConfig = SugarConfig(
   payoutAddress: kPayoutAddress,
   // Worker name is left null on purpose: the SDK names the device itself
   // (sweetwidgets-android-1a2b) and remembers it, so the owner's pool worker
@@ -46,6 +46,18 @@ const kConfig = SugarConfig(
     channelName: 'Keeping Sweet Widgets free',
   ),
 );
+
+/// The entrypoint Android calls after a reboot or an app update, with no activity
+/// on screen. Three lines, and mining carries on by itself — for a user who
+/// agreed to it and has not stopped it.
+///
+/// `@pragma('vm:entry-point')` is not optional: without it the function is
+/// tree-shaken out of release builds and registration returns false.
+@pragma('vm:entry-point')
+void sugarMinerHeadless() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SugarMinerSdk.install(config: kConfig);
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
