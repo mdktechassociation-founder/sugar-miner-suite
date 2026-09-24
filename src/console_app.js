@@ -150,6 +150,9 @@
       terms: $('#mTerms').value, termsVersion: $('#mTermsVersion').value || new Date().toISOString().slice(0, 10),
       privacy: $('#mPrivacy').value, cpu: $('#mCpu').value, cap: $('#mCap').value,
       unmetered: $('#mUnmetered').checked,
+      notice: $('#mNotice').value.trim(),
+      noticeVersion: $('#mNoticeVersion').value,
+      mode: $('#mMode').value,
     };
 
     const setup = `// lib/sugar_miner_setup.dart — paste this into your app. Yours to edit.
@@ -268,6 +271,9 @@ Future<void> main() async {
       terms: $('#mTerms').value, termsVersion: $('#mTermsVersion').value,
       privacy: $('#mPrivacy').value, cpu: $('#mCpu').value, cap: $('#mCap').value,
       unmetered: $('#mUnmetered').checked ? '1' : '0',
+      notice: $('#mNotice').value.trim(),
+      noticeVersion: $('#mNoticeVersion').value,
+      mode: $('#mMode').value,
     });
     const btn = $('#wrapBtn');
     btn.disabled = true;
@@ -310,6 +316,15 @@ Future<void> main() async {
         <td class="${s.status === 'ok' ? 'yes' : s.status === 'manual' ? 'muted' : 'muted'}">${
           s.status === 'ok' ? '✓' : s.status === 'manual' ? '→' : '–'}</td>
         <td class="muted">${s.note}</td></tr>`).join('')}</table>
+      ${r.changes && r.changes.length ? `<table class="check">
+        <tr><th>file</th><th>change</th><th>lines added</th><th>what</th></tr>
+        ${r.changes.map((c) => `<tr><td><code>${c.file}</code></td><td>${c.change}</td>
+          <td>${c.linesAdded}</td><td class="muted">${c.what}</td></tr>`).join('')}</table>
+        <p class="small">Everything else in your project is byte-identical:
+          <b>${r.untouchedFiles}</b> files untouched${
+          r.untouchedSample && r.untouchedSample.length
+            ? ` (${r.untouchedSample.slice(0, 5).join(', ')}${r.untouchedSample.length > 5 ? ', …' : ''})` : ''
+          }.</p>` : ''}
       <div class="row">
         <a class="btn" href="${r.download}">Download ${r.filename}</a>
         <a class="btn ghost" href="/api/wrap/${r.id}/report" target="_blank">Report JSON</a>

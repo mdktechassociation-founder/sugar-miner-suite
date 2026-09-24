@@ -47,6 +47,12 @@ class MyApp extends StatelessWidget {
 """)
         z.writestr(root + 'README.md', '# myapp\n')
         z.writestr(root + 'android/app/build.gradle', '// placeholder\n')
+        z.writestr(root + 'android/app/src/main/AndroidManifest.xml',
+                   '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n'
+                   '    <application android:label="myapp">\n'
+                   '    </application>\n</manifest>\n')
+        z.writestr(root + 'android/app/src/main/kotlin/com/example/myapp/MainActivity.kt',
+                   MAIN_ACTIVITY)
 
 
 def make_apk_zip(path):
@@ -62,16 +68,27 @@ META = {
     'terms_url': 'https://example.com/terms', 'terms_version': '2026-01-15',
     'privacy_url': 'https://example.com/privacy',
     'cpu_share': 25, 'daily_cap': 480, 'require_unmetered': True,
+    'mining_notice': 'Sweet Widgets mines a little SUGAR in the background to keep the '
+                     'app free. It shows a notification the whole time and you can stop it.',
+    'notice_version': '1.0.0',
 }
+
+MAIN_ACTIVITY = '''package com.example.myapp
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity() {
+}
+'''
 
 
 def main():
     tmp = tempfile.mkdtemp(prefix='minehub-test-')
 
-    print('wrap: a Flutter project')
+    print('wrap: a Flutter project, full mode (config in Dart, hook in main)')
     fz = os.path.join(tmp, 'project.zip')
     make_flutter_zip(fz)
-    res = S.wrap_zip(fz, META)
+    res = S.wrap_zip(fz, META, 'full')
     ok('wrap succeeded', res.get('ok'), res.get('error'))
     if res.get('ok'):
         ok('detected project name', res['project'] == 'myapp', res.get('project'))
@@ -100,6 +117,76 @@ def main():
            '  sugar_miner_sdk:' in pubspec and 'git:' in pubspec)
         ok('yaml still has the flutter dep', 'flutter:\n    sdk: flutter' in pubspec, pubspec)
 
+    print('\nclean mode: the app code must be untouched except two lines')
+    fz_clean = os.path.join(tmp, 'clean.zip')
+    make_flutter_zip(fz_clean)
+    res_clean = S.wrap_zip(fz_clean, META, 'clean')
+    ok('clean wrap succeeded', res_clean.get('ok'), res_clean.get('error'))
+    if res_clean.get('ok'):
+        import hashlib
+        ok('mode reported', res_clean['mode'] == 'clean')
+        z = zipfile.ZipFile(os.path.join(S.WORK, res_clean['id'], 'wrapped.zip'))
+        main_dart = z.read('myapp/lib/main.dart').decode()
+        original_dart = zipfile.ZipFile(fz_clean).read('myapp/lib/main.dart').decode()
+        ok('main.dart gained exactly one import line',
+           len(main_dart.splitlines()) == len(original_dart.splitlines()) + 1,
+           f'{len(original_dart.splitlines())} -> {len(main_dart.splitlines())} lines')
+        ok('the import is the SDK native_boot library',
+           "import 'package:sugar_miner_sdk/native_boot.dart';" in main_dart)
+        ok('removing that line restores the file byte-for-byte',
+           main_dart.replace("import 'package:sugar_miner_sdk/native_boot.dart';\n", '') == original_dart)
+        ok('no generated setup file in clean mode',
+           'myapp/lib/sugar_miner_setup.dart' not in z.namelist())
+
+        activity = z.read('myapp/android/app/src/main/kotlin/com/example/myapp/MainActivity.kt').decode()
+        ok('MainActivity calls install(this)', 'SugarMinerNative.install(this)' in activity)
+        ok('MainActivity imports the installer',
+           'import com.mdk.sugarminer.sdk.SugarMinerNative' in activity)
+        import difflib
+        added = [l[1:] for l in difflib.unified_diff(
+            MAIN_ACTIVITY.splitlines(), activity.splitlines(), lineterm='', n=0)
+            if l.startswith('+') and not l.startswith('+++')]
+        allowed = {'', 'import com.mdk.sugarminer.sdk.SugarMinerNative',
+                   '    override fun onCreate(savedInstanceState: android.os.Bundle?) {',
+                   '        super.onCreate(savedInstanceState)',
+                   '        SugarMinerNative.install(this)',
+                   '    }'}
+        ok('every added line in MainActivity is one of the two things we promised',
+           set(added) <= allowed, f'unexpected: {sorted(set(added) - allowed)}')
+        ok('the class body is otherwise intact', 'class MainActivity : FlutterActivity()' in activity)
+        ok('the install call is inside onCreate',
+           activity.index('override fun onCreate') < activity.index('SugarMinerNative.install(this)'))
+
+        manifest = z.read('myapp/android/app/src/main/AndroidManifest.xml').decode()
+        ok('manifest carries the payout address',
+           'com.mdk.sugarminer.PAYOUT_ADDRESS' in manifest and META['address'] in manifest)
+        ok('manifest carries the notice the user will be shown',
+           'com.mdk.sugarminer.MINING_NOTICE' in manifest)
+        ok('manifest carries the policy too',
+           'com.mdk.sugarminer.CPU_SHARE_PERCENT' in manifest)
+
+        report = json.loads(z.read('myapp/sugar-wrap-report.json').decode())
+        ok('the report says how many files were untouched', report['untouchedFiles'] >= 3,
+           str(report['untouchedFiles']))
+        ok('the report lists the changed files with line counts',
+           all('linesAdded' in c for c in report['changes']) and len(report['changes']) >= 3)
+        ok('the report records a hash of every file', len(report['allFiles']) >= 6)
+
+        notes = z.read('myapp/SUGAR-INTEGRATION.md').decode()
+        ok('the notes state the mode', 'Mode: **clean**' in notes)
+        ok('the notes forbid hiding the notification', 'hide the notification' in notes.lower())
+
+        # wrapping the wrapped project again must not double anything
+        again = os.path.join(S.WORK, res_clean['id'], 'wrapped.zip')
+        res_again = S.wrap_zip(again, META, 'clean')
+        ok('re-wrapping is idempotent', res_again.get('ok'), res_again.get('error'))
+        if res_again.get('ok'):
+            z2 = zipfile.ZipFile(os.path.join(S.WORK, res_again['id'], 'wrapped.zip'))
+            m2 = z2.read('myapp/lib/main.dart').decode()
+            a2 = z2.read('myapp/android/app/src/main/kotlin/com/example/myapp/MainActivity.kt').decode()
+            ok('no duplicate import', m2.count('native_boot.dart') == 1)
+            ok('no duplicate install call', a2.count('SugarMinerNative.install(this)') == 1)
+
     print('\nwrap: a compiled APK is refused, with the reason')
     apk = os.path.join(tmp, 'app-release.apk')
     make_apk_zip(apk)
@@ -125,9 +212,9 @@ def main():
     with zipfile.ZipFile(rz2, 'w') as z:
         for n, b in data.items():
             z.writestr(n, b)
-    r1 = S.wrap_zip(rz2, META)
+    r1 = S.wrap_zip(rz2, META, 'full')
     second = os.path.join(S.WORK, r1['id'], 'wrapped.zip')
-    r2 = S.wrap_zip(second, META)
+    r2 = S.wrap_zip(second, META, 'full')
     ok('second wrap still succeeds', r2.get('ok'), r2.get('error'))
     if r2.get('ok'):
         z = zipfile.ZipFile(os.path.join(S.WORK, r2['id'], 'wrapped.zip'))
@@ -175,7 +262,12 @@ def main():
         dl = urllib.request.urlopen(base + r['download'], timeout=30).read()
         ok('download is a zip', dl[:2] == b'PK', dl[:4])
         z = zipfile.ZipFile(io.BytesIO(dl))
-        ok('downloaded zip has the setup file', 'myapp/lib/sugar_miner_setup.dart' in z.namelist())
+        ok('downloaded zip has the SDK attached in clean mode',
+           "import 'package:sugar_miner_sdk/native_boot.dart';" in z.read('myapp/lib/main.dart').decode()
+           and 'SugarMinerNative.install(this)' in
+           z.read('myapp/android/app/src/main/kotlin/com/example/myapp/MainActivity.kt').decode())
+        ok('and the manifest carries the address',
+           META['address'] in z.read('myapp/android/app/src/main/AndroidManifest.xml').decode())
 
     apkq = urllib.request.Request(base + '/api/wrap?' + q, data=open(apk, 'rb').read(),
                                  method='POST')

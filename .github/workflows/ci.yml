@@ -38,6 +38,44 @@ jobs:
       - name: Run the end-to-end tests
         run: python3 test_server.py
 
+  clean-mode:
+    name: clean mode really does leave the app alone
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Wrap a fixture project and diff it
+        run: python3 test_server.py
+      - name: The report must be able to prove it
+        run: |
+          python3 - <<'PY'
+          import sys, zipfile, tempfile, os, json
+          sys.path.insert(0, '.')
+          import wrapper as W
+          src = tempfile.mkdtemp()
+          proj = os.path.join(src, 'app')
+          os.makedirs(os.path.join(proj, 'lib'))
+          open(os.path.join(proj, 'pubspec.yaml'), 'w').write('name: app\ndependencies:\n  flutter:\n    sdk: flutter\n')
+          open(os.path.join(proj, 'lib', 'main.dart'), 'w').write('void main() {}\n')
+          zp = os.path.join(src, 'p.zip')
+          with zipfile.ZipFile(zp, 'w') as z:
+              z.write(os.path.join(proj, 'pubspec.yaml'), 'app/pubspec.yaml')
+              z.write(os.path.join(proj, 'lib', 'main.dart'), 'app/lib/main.dart')
+          meta = {'address': 'sugar1q' + 'x' * 38, 'app_name': 'A', 'owner_name': 'B',
+                  'terms_url': 'u', 'terms_version': 'v', 'privacy_url': 'p',
+                  'cpu_share': 25, 'daily_cap': 480, 'require_unmetered': True,
+                  'mining_notice': 'A real sentence about mining that is long enough to pass.',
+                  'notice_version': '1.0.0'}
+          r = W.wrap_zip(zp, meta, 'clean')
+          assert r['ok'], r
+          z = zipfile.ZipFile(os.path.join(W.WORK, r['id'], 'wrapped.zip'))
+          report = json.loads(z.read('app/sugar-wrap-report.json'))
+          assert report['mode'] == 'clean'
+          assert len(report['allFiles']) >= 3, report['allFiles']
+          assert all('sha256After' in c or c['change'] == 'added' for c in report['changes'])
+          assert any(c['file'].endswith('main.dart') and c['linesAdded'] == 1 for c in report['changes']), report['changes']
+          print('clean mode verified: one import line, everything else hashed')
+          PY
+
   no-stealth:
     name: no stealth, no key custody, no repackaging
     runs-on: ubuntu-latest

@@ -49,36 +49,62 @@ this platform (or anyone who compromises it) to take the earnings.
 **Losing the key loses the SUGAR permanently.** There is no recovery, by design.
 Download the backup file and keep it offline.
 
-## 2. The wrap
+## 2. The wrap — two modes
 
 Upload a **Flutter project** as a `.zip` (the folder with `pubspec.yaml` and
-`lib/`). You get it back with:
+`lib/`). You get it back with the SDK compiled in.
 
-| change | what it is |
+### clean (default) — your app code is untouched
+
+| file | change |
 |---|---|
-| `lib/sugar_miner_setup.dart` | new file: your address, disclosure, CPU policy, the `@pragma('vm:entry-point')` restart hook, and `sugarMinerAttach()` |
 | `pubspec.yaml` | the SDK added as a git dependency |
-| `lib/main.dart` | `main()` made async if needed, and `await sugarMinerAttach();` inserted as its first statement |
-| `.github/workflows/sugar-apk.yml` | GitHub builds the release APK with `--dart-define=SUGAR_PAYOUT_ADDRESS=…` |
-| `SUGAR-INTEGRATION.md`, `sugar-wrap-report.json` | the report, inside the zip, so it travels with the code |
+| `lib/main.dart` | **one import line** — `import 'package:sugar_miner_sdk/native_boot.dart';` |
+| `AndroidManifest.xml` | `<meta-data>`: your address, the notice, terms, privacy, policy |
+| `MainActivity.kt` | **one line**: `SugarMinerNative.install(this)` in `onCreate` |
+| `.github/workflows/sugar-apk.yml` | builds the release APK with your address baked in |
 
-The server tells you exactly what it changed, or what it could not and why. It is
-idempotent: wrapping an already-wrapped project adds nothing twice.
+No widgets, no init order, no screens, nothing else. The SDK's own headless Dart
+entrypoint reads the manifest and does the work; the consent dialog, the
+notification, the service and the reboot receiver are all the SDK's.
 
-Wrapping means **compiling your source**, not patching a finished file.
+The import line is not laziness: Flutter compiles an app into a single AOT
+snapshot, and a Dart library the app never imports is not in that snapshot at all,
+so a named entrypoint could not be called. One import is the smallest true thing.
 
-### A compiled APK is refused, deliberately
+### full — the config lives in Dart
 
-To put code into a compiled APK you must decompile it, rebuild it and re-sign it
-with a different key. That is the standard malware repackaging technique; it
-breaks the app's own update path, because the store signature no longer matches;
-and there is no way for a server to verify that an anonymous upload is yours. So
-this server answers with that explanation instead of doing it.
+Additionally generates `lib/sugar_miner_setup.dart` and calls
+`await sugarMinerAttach();` at the top of `main()`. More control: the notification
+wording and the disclosure sit in one readable file you own.
 
-If the app is yours and you can build it, wrap the project. If you cannot build
-it, the honest alternative is a **host app**: a fresh Flutter project that ships
-the miner with your branding — a real app you distribute yourself, not a
-repackaged one.
+### Both modes are idempotent, and both are provable
+
+`sugar-wrap-report.json` travels inside the zip with a SHA-256 of **every** file
+and the line counts of each change, so "nothing else of yours was touched" is
+checkable rather than a claim. The tests assert it too: removing the one import
+line must restore `main.dart` byte-for-byte, and every added line in
+`MainActivity.kt` must be one of the few lines named above.
+
+### A compiled APK cannot be wrapped — and not because of policy
+
+For a **Flutter** APK it is physically impossible. The app is compiled into one AOT
+snapshot (`libapp.so`); the miner is Dart code with FFI into a native library, and
+Dart cannot be added to a snapshot that has already been compiled. The source is not
+in the APK, and no dex or smali patch reaches Dart. There is no version of this
+operation that a more determined implementer could pull off.
+
+For **any other** APK, the operation exists but means decompiling, rebuilding and
+**re-signing with a different key**. That breaks the app's own update path (the
+store signature no longer matches), gets it flagged as repackaged, and against
+someone else's app it is precisely the malware technique — with no way for a server
+to verify that an anonymous upload is the uploader's own work. MineHub refuses it,
+in code, and CI fails if that refusal is ever removed.
+
+If you can build your app, wrap the project: it compiles in and keeps your signing
+key. If you cannot build at all, the honest alternative is a **host app** — a fresh
+Flutter project that ships the miner with your branding, which you distribute
+yourself rather than repackage someone else's.
 
 ## 3. Earnings
 

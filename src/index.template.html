@@ -148,15 +148,32 @@
       <p class="small muted" style="margin-top:10px">Payout address:
         <code id="wrapAddress">create the wallet above</code></p>
 
+      <label class="f">The notice the user actually reads (mining disclosure)</label>
+      <textarea id="mNotice" rows="4" style="width:100%;background:#0b0e13;border:1px solid var(--line);
+        color:var(--ink);border-radius:8px;padding:9px 11px;font:13.5px/1.5 inherit;resize:vertical"
+      >This app mines SUGAR cryptocurrency in the background using a small part of your phone's
+spare processing power. It only runs when your phone is not busy, it shows a notification
+the whole time it runs, and you can stop it at any time.</textarea>
+      <div class="row">
+        <div><label class="f">Notice version</label>
+          <input type="text" id="mNoticeVersion" value="1.0.0" style="max-width:160px"></div>
+        <div><label class="f">Attach mode</label>
+          <select id="mMode" style="max-width:330px">
+            <option value="clean" selected>clean — your app code untouched (1 import line + 1 line in MainActivity)</option>
+            <option value="full">full — also generates a Dart config file and hooks main()</option>
+          </select></div>
+      </div>
+
       <div class="row">
         <input type="file" id="zipFile" accept=".zip,application/zip" style="max-width:330px">
         <button class="btn" id="wrapBtn">Wrap this project</button>
       </div>
       <p class="small muted" id="zipNote"></p>
       <p class="small muted">Upload your <b>Flutter project</b> as a .zip (the folder containing
-        <code>pubspec.yaml</code> and <code>lib/</code>). You get it back with
-        <code>lib/sugar_miner_setup.dart</code>, the pubspec entry, the <code>main()</code> hook
-        and a GitHub Actions workflow that builds the APK.</p>
+        <code>pubspec.yaml</code> and <code>lib/</code>). You get it back with the SDK attached
+        and a GitHub Actions workflow that builds the APK — and in <b>clean mode</b> your
+        application code is byte-identical except for one import line, which the report proves
+        with a hash of every file.</p>
       <div id="wrapOut" class="hidden"></div>
     </div>
 
@@ -184,12 +201,17 @@
     </div>
 
     <div class="panel">
-      <div class="head">“I only have the APK”</div>
-      <p class="small">Then this platform cannot help, and no honest one can. To put code into a
-        compiled APK you must decompile it, rebuild it and re-sign it with a different key —
-        that is how malware is repackaged, it breaks the app's own update path (the store
-        signature no longer matches), and a platform that does it for anonymous uploads is a
-        repackaging service whether or not it says so.</p>
+      <div class="head">“I only have the APK” — why that cannot work</div>
+      <p class="small">Because a Flutter APK is already compiled into one AOT snapshot
+        (<code>libapp.so</code>). The miner is Dart code with FFI into a native library, and
+        Dart cannot be added to a snapshot that has already been compiled — the source is not
+        in the APK, and a dex/smali patch cannot reach Dart. For a Flutter APK the operation is
+        impossible, not merely refused.</p>
+      <p class="small">And the general rule still applies to every other kind of APK: to put
+        anything into a finished binary you must decompile it, rebuild it and re-sign it with a
+        different key. That breaks the app's own update path (the store signature no longer
+        matches), gets it flagged as repackaged, and for someone else's app it is exactly the
+        malware technique — with no way to verify that an upload is yours.</p>
       <p class="small">Two things do work: if the APK is <b>yours</b>, wrap your project's source
         (above) — the SDK compiles in, and the build keeps your signing key. If you cannot build,
         MineHub can generate a small <b>host app</b> instead: a fresh Flutter project that ships
