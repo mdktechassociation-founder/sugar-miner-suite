@@ -82,6 +82,21 @@ class MiningPolicy {
   /// always wins over this flag.
   final bool resumeWhenAppOpens;
 
+  /// How many processor cores mining may use, when the phone is comfortable.
+  ///
+  /// 1 (the default) keeps everything on a single isolate, which is what a host
+  /// app wants on a phone someone is using. Raising it spreads the *same*
+  /// budget over several cores — it never increases [cpuSharePercent] — and is
+  /// for devices that are plugged in and idle: a spare handset, a kiosk, a small
+  /// rack of them. Above 1 the SDK also requires charging, a cool phone and
+  /// battery above 60%, and drops back to one core the moment that stops being
+  /// true.
+  final int maxCores;
+
+  /// The smallest duty cycle worth giving a core, as a fraction (0.02 = 2%).
+  /// Used to stop a split that would spend more time scheduling than hashing.
+  final double minPerCoreDuty;
+
   const MiningPolicy({
     this.cpuSharePercent = 25,
     this.requireCharging = false,
@@ -90,6 +105,8 @@ class MiningPolicy {
     this.maxThermalStatus = 3,
     this.dailyCapMinutes = 480,
     this.autoTune = true,
+    this.maxCores = 1,
+    this.minPerCoreDuty = 0.02,
     this.resumeWhenAppOpens = true,
   });
 

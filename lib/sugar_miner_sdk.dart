@@ -31,6 +31,7 @@ import 'src/auto_config.dart';
 import 'src/consent.dart';
 import 'src/headless.dart' as headless;
 import 'src/miner/engine.dart';
+import 'src/core_plan.dart';
 import 'src/miner_isolate.dart';
 import 'src/miner_api.dart';
 import 'src/notification_style.dart';
@@ -41,6 +42,7 @@ import 'src/sugar_config.dart';
 
 export 'src/auto_config.dart' show AutoConfigurator, DeviceHealth, MiningProfile, WorkerIdentity;
 export 'src/consent.dart';
+export 'src/core_plan.dart' show CorePlan, CoreScheduler;
 export 'src/headless.dart' show HeadlessEntrypoint;
 export 'src/disclosure.dart';
 export 'src/miner/engine.dart' show MinerSnapshot, ShareFound, hashesPerShare;
@@ -60,7 +62,8 @@ class SugarMiner implements SugarMinerApi {
   @override
   final MiningPolicy policy;
 
-  MinerIsolate? _isolate;
+  final List<MinerIsolate> _isolates = <MinerIsolate>[];
+  CorePlan _corePlan = const CorePlan(1, 0, 'not started');
   StreamSubscription<MiningProfile>? _watchdog;
   Timer? _budgetTicker;
   MiningProfile _profile = MiningProfile.paused;
@@ -68,6 +71,10 @@ class SugarMiner implements SugarMinerApi {
   String _workerName = '';
   bool _stoppedByUser = false;
   final List<String> _recentLog = <String>[];
+
+  /// Latest snapshot from each core, keyed by its index, so the aggregate can be
+  /// recomputed whenever any one of them reports.
+  final Map<int, MinerSnapshot> _perCoreStats = <int, MinerSnapshot>{};
 
   final StreamController<MinerSnapshot> _stats = StreamController<MinerSnapshot>.broadcast();
   final StreamController<String> _logs = StreamController<String>.broadcast();
@@ -93,7 +100,10 @@ class SugarMiner implements SugarMinerApi {
   MinerSnapshot get snapshot => _lastStats;
 
   @override
-  bool get isRunning => _isolate != null;
+  bool get isRunning => _isolates.isNotEmpty;
+
+  /// How the agreed budget is being spent right now: one core or several.
+  CorePlan get corePlan => _corePlan;
   @override
   bool get isPaused => !_lastDecision.allowed;
   @override
@@ -141,7 +151,7 @@ class SugarMiner implements SugarMinerApi {
   /// Starts mining if the user agreed and the phone is in a fit state.
   @override
   Future<MinerStartResult> start({bool byUser = false}) async {
-    if (_isolate != null) return const MinerStartResult(true, 'already running');
+    if (_isolates.isNotEmpty) return const MinerStartResult(true, 'already running');
 
     if (!config.isValid) {
       return const MinerStartResult(
@@ -181,30 +191,117 @@ class SugarMiner implements SugarMinerApi {
     return _spinUp(profile.dutyShare, profile.batch);
   }
 
-  Future<MinerStartResult> _spinUp(double duty, int batch) async {
+  Future<MinerStartResult> _spinUp(double duty, int batch, {CorePlan? plan}) async {
     _workerName = await WorkerIdentity.resolve(
       appSlug: config.appName,
       configured: config.workerName,
     );
-    _isolate = await MinerIsolate.spawn(
-      config: config,
-      policy: policy,
-      workerName: _workerName,
-      onLog: _note,
-    );
-    _isolate!.applyProfile(duty, batch);
-    _isolate!.stats.listen((s) {
-      _lastStats = s;
-      _stats.add(s);
-      _showNotification(null, hashrate: s);
-    });
-    _isolate!.logs.listen(_note);
-    _isolate!.shares.listen((accepted) => _note(accepted ? 'share accepted ✓' : 'share rejected'));
 
+    final health = await PolicyEngine(policy).health();
+    final effective = plan ??
+        CoreScheduler.plan(
+          policy: policy,
+          dutyShare: duty,
+          charging: health.raw.charging,
+          thermal: health.raw.thermalStatus,
+          batteryPercent: health.raw.batteryPercent,
+        );
+    _corePlan = effective;
+    _note('core plan: $effective');
+
+    await _spawnCores(effective, batch);
     _armWatchdog(PolicyEngine(policy));
     _startBudgetTicker();
-    _note('mining as worker "$_workerName" (${(duty * 100).round()}% of one core)');
+    _note('mining as worker "$_workerName" — ${effective.cores} '
+        'core${effective.cores == 1 ? '' : 's'}, '
+        '${(effective.totalDuty * 100).toStringAsFixed(1)}% of one core in total');
     return const MinerStartResult(true, 'mining');
+  }
+
+  /// Spawns exactly the isolates the plan asks for, wiring their streams into one
+  /// aggregate. The single-core case is the same code path with [plan].cores == 1,
+  /// which is deliberate: a second, "multi-core only" branch is how the two
+  /// paths drift apart and one of them quietly loses a policy check.
+  Future<void> _spawnCores(CorePlan plan, int batch) async {
+    _perCoreStats.clear();
+    for (var i = 0; i < plan.cores; i++) {
+      final index = i;
+      final isolate = await MinerIsolate.spawn(
+        config: config,
+        policy: policy,
+        workerName: _workerName,
+        onLog: (line) => _note(plan.cores > 1 ? '[c${index + 1}] $line' : line),
+      );
+      // Each core gets the *per-core* duty, so cores × duty ≤ the agreed budget.
+      isolate.applyProfile(plan.perCoreDuty, batch);
+      isolate.stats.listen((snapshot) {
+        _perCoreStats[index] = snapshot;
+        _publishAggregateStats();
+      });
+      isolate.logs.listen((line) => _note(plan.cores > 1 ? '[c${index + 1}] $line' : line));
+      isolate.shares.listen(
+          (accepted) => _note(accepted ? 'share accepted ✓' : 'share rejected'));
+      _isolates.add(isolate);
+    }
+  }
+
+  /// The phone's state changed enough to want a different number of cores.
+  /// Resizing means different isolates, so this is stop-then-start — but the
+  /// consent gate is not re-run (nothing about consent changed) and the
+  /// notification is not torn down (mining never actually stopped).
+  Future<void> _restartForCoreCount(CorePlan plan, int batch) async {
+    for (final isolate in _isolates) {
+      await isolate.stop();
+    }
+    _isolates.clear();
+    _corePlan = plan;
+    await _spawnCores(plan, batch);
+    _note('core plan now: $plan');
+  }
+
+  /// One stream for the host app: the sum of what every isolate is doing.
+  ///
+  /// Summing is the honest aggregation here — hashrate and share counts are
+  /// additive, and the best-share and difficulty figures are maxima, not sums,
+  /// so a single-core app sees exactly what it saw before.
+  void _publishAggregateStats() {
+    if (_perCoreStats.isEmpty) return;
+    var hashrate = 0.0;
+    var hashes = 0;
+    var sharesFound = 0;
+    var accepted = 0;
+    var rejected = 0;
+    var bestShareDiff = 0.0;
+    var difficulty = 0.0;
+    var jobAgeSeconds = 0;
+    String? jobId;
+    for (final s in _perCoreStats.values) {
+      hashrate += s.hashrate;
+      hashes += s.hashes;
+      sharesFound += s.sharesFound;
+      accepted += s.accepted;
+      rejected += s.rejected;
+      if (s.bestShareDiff > bestShareDiff) bestShareDiff = s.bestShareDiff;
+      if (s.difficulty > difficulty) difficulty = s.difficulty;
+      if (s.jobId != null) {
+        jobId = s.jobId;
+        jobAgeSeconds = s.jobAgeSeconds;
+      }
+    }
+    final aggregate = MinerSnapshot(
+      hashrate: hashrate,
+      hashes: hashes,
+      sharesFound: sharesFound,
+      accepted: accepted,
+      rejected: rejected,
+      bestShareDiff: bestShareDiff,
+      difficulty: difficulty,
+      jobId: jobId,
+      jobAgeSeconds: jobAgeSeconds,
+    );
+    _lastStats = aggregate;
+    _stats.add(aggregate);
+    _showNotification(null, hashrate: aggregate);
   }
 
   /// Stops hashing and takes the notification down.
@@ -218,8 +315,10 @@ class SugarMiner implements SugarMinerApi {
     _watchdog = null;
     _budgetTicker?.cancel();
     _budgetTicker = null;
-    await _isolate?.stop();
-    _isolate = null;
+    for (final isolate in _isolates) {
+      await isolate.stop();
+    }
+    _isolates.clear();
     await ServiceBridge.stopForeground();
     _note('mining stopped');
   }
@@ -244,11 +343,30 @@ class SugarMiner implements SugarMinerApi {
       if (!profile.canMine) {
         // keep the isolate but stop hashing: cheaper to resume, and the session
         // on the pool stays open
-        await _isolate?.stop();
-        _isolate = null;
+        for (final isolate in _isolates) {
+          await isolate.stop();
+        }
+        _isolates.clear();
         await _showNotification('paused');
-      } else if (_isolate != null) {
-        _isolate!.applyProfile(profile.dutyShare, profile.batch);
+      } else if (_isolates.isNotEmpty) {
+        // Re-plan the core count too: a phone that stops charging, or warms up,
+        // falls back to a single core without the app being involved.
+        final replanned = CoreScheduler.plan(
+          policy: policy,
+          dutyShare: profile.dutyShare,
+          charging: profile.charging,
+          thermal: profile.thermalStatus,
+          batteryPercent: profile.batteryPercent,
+        );
+        if (replanned.cores != _corePlan.cores) {
+          _note('core plan changed: ${_corePlan.cores} → ${replanned.cores} (${replanned.why})');
+          await _restartForCoreCount(replanned, profile.batch);
+          return;
+        }
+        _corePlan = replanned;
+        for (final isolate in _isolates) {
+          isolate.applyProfile(replanned.perCoreDuty, profile.batch);
+        }
         await _showNotification(null);
       } else if (startWhenAllowed || wasMining) {
         await _spinUp(profile.dutyShare, profile.batch);
@@ -259,7 +377,7 @@ class SugarMiner implements SugarMinerApi {
   void _startBudgetTicker() {
     _budgetTicker?.cancel();
     _budgetTicker = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (_isolate != null && _lastDecision.allowed) {
+      if (_isolates.isNotEmpty && _lastDecision.allowed) {
         PolicyEngine.addMinedSeconds(60);
       }
     });
@@ -298,7 +416,7 @@ class SugarMiner implements SugarMinerApi {
     final title = config.notification.title(values);
     final body = config.notification.body(values);
 
-    if (_isolate == null) {
+    if (_isolates.isEmpty) {
       await ServiceBridge.startForeground(
         title: title,
         text: body,

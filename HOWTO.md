@@ -8,7 +8,7 @@ things: **set a wallet address**, and **provide a disclosure** (terms + privacy 
 > ⚠️ **No stealth, and none is coming.** "Mine without the user knowing" is not a
 > feature of this SDK — it is cryptojacking, it is a crime in most countries, and it
 > is a Play Store ban. There is no flag anywhere in the code to hide or silence the
-> notification, and `tools/guardrails.py` enforces that in CI (**46 checks**). Add
+> notification, and `tools/guardrails.py` enforces that in CI (**55 checks**). Add
 > stealth and **CI fails**.
 
 ---
@@ -219,7 +219,7 @@ too.
 `SugarMinerSdk.restartBehaviour()` returns a sentence describing exactly what happens on
 that device — show it in your UI.
 
-## 6. What CI enforces on every push (46 checks)
+## 6. What CI enforces on every push (55 checks)
 
 Consent gates the start path **before** anything else (including the boot receiver) ·
 the SDK can never undo the user's "stop" · after a reboot, consent, stop and
@@ -229,7 +229,7 @@ fixed) · the consented UI shows who benefits, never a wallet string · the payo
 has no setter · terms and privacy are mandatory · auto-config can never exceed the
 agreed CPU ceiling · no stealth/hidden/silent wording exists anywhere in the code.
 
-Two files exist now: **`tools/guardrails.py`** (46 checks, runs in CI — this is the only
+Two files exist now: **`tools/guardrails.py`** (55 checks, runs in CI — this is the only
 thing that can fail the build) and **`tools/checks_optional.py`** (15 checks — wording,
 branding, XML hygiene; not in CI; run it if you like it, delete the file if you do not).
 
@@ -240,7 +240,32 @@ crediting the work as real.
 
 ---
 
-## 7. The honest limits
+## 7. Rig mode, if your devices are plugged in
+
+Default is one core, and for a phone in a pocket that is the right answer. If your
+deployment is a kiosk, a spare handset on a shelf, or a rack of devices that live on
+chargers, `maxCores` spends the *same* CPU budget across several cores:
+
+```dart
+static const policy = MiningPolicy(
+  cpuSharePercent: 50,
+  maxCores: 4,          // 12.5% duty per core; 50% of one core in total
+);
+```
+
+Three things to know before you switch it on:
+
+1. **It is still 50% of one core.** The SDK cannot exceed `cpuSharePercent`; the plan is
+   `cores × perCoreDuty == the agreed budget`, and a test sweeps 11,200 combinations to
+   keep it that way.
+2. **The phone decides, not you.** Charging + cool + above 60% battery, or it is one
+   core. A rig that starts and stops as the device warms is working as designed, not
+   malfunctioning.
+3. **Say so in your disclosure.** If you turn this on, your notice and your own
+   documentation should mention more than one core, because your users agreed to "25%
+   of one core", not to a number you chose later.
+
+## 8. The honest limits
 
 - One phone does roughly 100–400 H/s; at a 25% duty cycle that is a quarter of it —
   **cents per month**. Mining is not an app revenue model in 2026 (ads or IAP are).

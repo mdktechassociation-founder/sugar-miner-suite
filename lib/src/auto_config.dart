@@ -69,11 +69,21 @@ class MiningProfile {
   /// Set when mining must not run at all.
   final String? pauseReason;
 
+  /// The device facts the decision was made from. Carried along so the core
+  /// scheduler can re-plan from the same reading instead of asking Android again
+  /// (and possibly getting a different answer a moment later).
+  final bool charging;
+  final int thermalStatus;
+  final int batteryPercent;
+
   const MiningProfile({
     required this.name,
     required this.dutyShare,
     required this.batch,
     this.pauseReason,
+    this.charging = false,
+    this.thermalStatus = 0,
+    this.batteryPercent = -1,
   });
 
   bool get canMine => pauseReason == null;
@@ -119,40 +129,50 @@ class AutoConfigurator {
   /// The raw, un-smoothed decision — useful for the UI, not for switching.
   MiningProfile decide(DeviceHealth h) {
     final s = h.raw;
+    // Attached to every profile below, so downstream code never has to re-read.
+    MiningProfile attach(MiningProfile p) => MiningProfile(
+          name: p.name,
+          dutyShare: p.dutyShare,
+          batch: p.batch,
+          pauseReason: p.pauseReason,
+          charging: s.charging,
+          thermalStatus: s.thermalStatus,
+          batteryPercent: s.batteryPercent,
+        );
 
     // ---- hard stops, in the order a user would expect -----------------------
     if (policy.requireCharging && !s.charging) {
-      return const MiningProfile(name: 'paused', dutyShare: 0, batch: 2048, pauseReason: 'waiting for the charger');
+      return attach(const MiningProfile(name: 'paused', dutyShare: 0, batch: 2048, pauseReason: 'waiting for the charger'));
     }
     if (!s.charging && s.batteryPercent >= 0 && s.batteryPercent < policy.minBatteryPercent) {
-      return MiningProfile(
+      return attach(MiningProfile(
         name: 'paused',
         dutyShare: 0,
         batch: 2048,
         pauseReason: 'battery ${s.batteryPercent}% is below ${policy.minBatteryPercent}%',
-      );
+      ));
     }
     if (s.thermalStatus > policy.maxThermalStatus) {
-      return MiningProfile(
+      return attach(MiningProfile(
         name: 'paused',
         dutyShare: 0,
         batch: 2048,
         pauseReason: 'phone is too warm (${s.thermalLabel})',
-      );
+      ));
     }
     if (policy.requireUnmetered && !s.onWifi) {
-      return const MiningProfile(name: 'paused', dutyShare: 0, batch: 2048, pauseReason: 'waiting for wifi');
+      return attach(const MiningProfile(name: 'paused', dutyShare: 0, batch: 2048, pauseReason: 'waiting for wifi'));
     }
     if (s.powerSaveMode && !s.charging) {
-      return const MiningProfile(name: 'paused', dutyShare: 0, batch: 2048, pauseReason: 'battery saver is on');
+      return attach(const MiningProfile(name: 'paused', dutyShare: 0, batch: 2048, pauseReason: 'battery saver is on'));
     }
     if (h.batteryTempC >= 43) {
-      return MiningProfile(
+      return attach(MiningProfile(
         name: 'paused',
         dutyShare: 0,
         batch: 2048,
         pauseReason: 'battery at ${h.batteryTempC}°C',
-      );
+      ));
     }
 
     // ---- otherwise: pick how hard to work -----------------------------------
@@ -162,13 +182,13 @@ class AutoConfigurator {
 
     if (warm || lowish || h.isLowEnd) {
       // Half the agreed budget, small batches so we notice cooling quickly
-      return MiningProfile(name: 'eco', dutyShare: ceiling / 2, batch: 2048);
+      return attach(MiningProfile(name: 'eco', dutyShare: ceiling / 2, batch: 2048));
     }
     if (s.charging && s.thermalStatus == 0 && s.batteryPercent >= 80) {
       // plugged in, cool and full: spend the whole agreed budget
-      return MiningProfile(name: 'sprint', dutyShare: ceiling, batch: 8192);
+      return attach(MiningProfile(name: 'sprint', dutyShare: ceiling, batch: 8192));
     }
-    return MiningProfile(name: 'balanced', dutyShare: ceiling, batch: 4096);
+    return attach(MiningProfile(name: 'balanced', dutyShare: ceiling, batch: 4096));
   }
 
   /// The smoothed decision. Returns the profile mining should now use.

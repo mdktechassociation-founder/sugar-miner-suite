@@ -32,7 +32,7 @@ user agrees to it once, and the SDK does the rest quietly in the background.
 | run until the phone dies | hard stops for battery, battery temperature, heat, metered data, and a daily minute budget |
 | sneak back after being stopped | the notification's Stop button is final: the SDK will not restart by itself |
 
-All of that is enforced by `tools/guardrails.py` — **46 checks** that run in CI on
+All of that is enforced by `tools/guardrails.py` — **55 checks** that run in CI on
 every push and fail the build if any of it stops being true. There is no
 `stealth: true` flag to find, because one was never written.
 
@@ -43,11 +43,44 @@ dependencies:
   sugar_miner_sdk:
     git:
       url: https://github.com/mdktechassociation-founder/sugar-miner-sdk.git
-      ref: main
+      ref: v2.0.0   # pin a tag — never `main`
 ```
+
+**Pin the tag.** A `ref: main` dependency means the engine inside your released app
+changes whenever this repository does, without a line of your code changing and
+without your build noticing. Pin `v2.0.0` (or whichever tag you have tested) and move
+it deliberately.
 
 `flutter pub get`. Nothing to add to your Android manifest — the plugin brings its
 permissions, its foreground service and its notification icon with it.
+
+## Rig mode: more cores, not more phone
+
+Off by default. On, it splits the budget you already agreed to across several cores
+instead of spending it on one:
+
+```dart
+static const policy = MiningPolicy(
+  cpuSharePercent: 50,   // still the ceiling — not a starting point
+  maxCores: 4,           // 50% / 4 = four cores at 12.5% duty each
+  minPerCoreDuty: 0.02,  // never split a core below 2% duty; it stops paying for itself
+);
+```
+
+What keeps it honest:
+
+- **the total cannot exceed `cpuSharePercent`** — the split is arithmetic, and
+  `test/core_plan_test.dart` sweeps 11,200 device states to prove it;
+- **the phone gets a veto**: charging, `thermalStatus` below 2, and above 60% battery,
+  all three, or the engine drops back to one core by itself;
+- **the worker does not change** — same identity, same pool, same shares. A rig mines
+  the same coins at the same address;
+- **`corePlan` tells you what happened**, in words you can show a user:
+  `4 cores at 12.5% each (50.0% of one core total) — charging and cool, so the same
+  budget spread over 4 cores`.
+
+It is for the phone on a charger that nobody is holding. On a phone in a pocket, heat
+makes the policy engine pause more often, and one core is genuinely the better setting.
 
 ## The whole integration
 
@@ -187,10 +220,12 @@ visibility is the user's.
 
 CI on every push:
 
-* **`tools/guardrails.py`** — 46 checks: consent gates the start path, the wallet
+* **`tools/guardrails.py`** — 55 checks: consent gates the start path, the wallet
   has no setter, the disclosure requires terms + privacy, no stealth keyword
   exists anywhere, the notification is visible with a Stop action, the profiler
   never exceeds the ceiling, auto-start is behind the consent gate.
+* **`flutter test`** — the core plan: 11,200 policy/device combinations, asserting that
+  the total duty never exceeds the consented `cpuSharePercent`.
 * **`tools/selftest.py`** — builds the C core and reproduces the SugarChain
   genesis PoW hash `0031205acedcc69a9c18f79b84790179d68fb90588bedee6587ff701bdde04eb`.
 * **`example/`** — analyzed, built into an APK, and the APK is opened to prove
