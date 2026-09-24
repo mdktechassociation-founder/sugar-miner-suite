@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'headless.dart';
+
 /// Records that the device owner accepted the app's mining disclosure.
 ///
 /// This is the switch the whole SDK hangs on: [SugarMiner.start] refuses to do
@@ -29,6 +31,9 @@ class SugarConsent {
     await p.setString(_keyVersion, consentVersion);
     await p.setString(_keyWhen, DateTime.now().toIso8601String());
     await p.setBool(_keyUserStopped, false);
+    // mirror, so the boot receiver can honour this answer before Dart is up
+    await ConsentMirror.setGranted(true);
+    await ConsentMirror.setStopped(false);
   }
 
   /// The user said no, or withdrew later. Mining must stop and must not restart.
@@ -38,6 +43,8 @@ class SugarConsent {
     await p.remove(_keyVersion);
     await p.remove(_keyWhen);
     await p.setBool(_keyUserStopped, true);
+    await ConsentMirror.setGranted(false);
+    await ConsentMirror.setStopped(true);
   }
 
   /// The user pressed "stop" — in the app or on the notification itself.
@@ -45,11 +52,13 @@ class SugarConsent {
   static Future<void> markStoppedByUser() async {
     final p = await SharedPreferences.getInstance();
     await p.setBool(_keyUserStopped, true);
+    await ConsentMirror.setStopped(true);
   }
 
   static Future<void> clearUserStopped() async {
     final p = await SharedPreferences.getInstance();
     await p.setBool(_keyUserStopped, false);
+    await ConsentMirror.setStopped(false);
   }
 
   static Future<bool> wasStoppedByUser() async {

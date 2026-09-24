@@ -39,12 +39,15 @@ class SugarMiningService : Service() {
         const val EXTRA_COLOR = "colorArgb"
 
         /**
-         * Set when the user themselves stopped mining, so the SDK never starts
-         * again on its own. Written in the same shared-preferences file the Dart
-         * `shared_preferences` plugin uses, so both sides see one flag.
+         * The same shared-preferences file the Dart `shared_preferences` plugin
+         * writes, so both sides read one source of truth. These keys are the
+         * whole "is this allowed to run" decision, and SugarBootReceiver checks
+         * them before resuming after a restart.
          */
         const val PREF_FILE = "FlutterSharedPreferences"
         const val PREF_STOPPED_BY_USER = "flutter.sugar_sdk_user_stopped"
+        const val PREF_CONSENT_GRANTED = "flutter.sugar_sdk_consent_granted"
+        const val PREF_BOOT_CALLBACK = "flutter.sugar_sdk_boot_callback"
 
         @Volatile
         var running: Boolean = false
@@ -75,11 +78,13 @@ class SugarMiningService : Service() {
             }
             ACTION_STOP_BY_USER -> {
                 // The stop button in the notification. The user's word is final:
-                // record it so the SDK will not resume by itself, then go.
+                // record it, cancel the self-restart alarm, and never come back.
                 getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
                     .edit()
                     .putBoolean(PREF_STOPPED_BY_USER, true)
                     .apply()
+                SugarBootReceiver.cancelReArm(this)
+                HeadlessMinerEngine.stop()
                 stopMining()
                 return START_NOT_STICKY
             }
@@ -199,6 +204,18 @@ class SugarMiningService : Service() {
         stopSelf()
     }
 
+    /**
+     * Android -- or an OEM's task killer -- ends background services, so ask to
+     * be woken again in a while. The receiver re-checks the user's choice before
+     * doing anything, so a miner the user stopped stays stopped.
+     */
+    private fun armReArm() {
+        val prefs = getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean(PREF_CONSENT_GRANTED, false)) return
+        if (prefs.getBoolean(PREF_STOPPED_BY_USER, false)) return
+        SugarBootReceiver.scheduleReArm(this, SugarBootReceiver.RE_ARM_FIRST_MS)
+    }
+
     override fun onDestroy() {
         running = false
         try {
@@ -206,6 +223,7 @@ class SugarMiningService : Service() {
         } catch (_: Exception) {
         }
         wakeLock = null
+        armReArm()
         super.onDestroy()
     }
 }

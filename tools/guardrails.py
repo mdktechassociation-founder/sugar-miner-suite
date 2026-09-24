@@ -194,7 +194,38 @@ def main():
     check('the battery-exemption flow asks the user rather than assuming',
           'requestIgnoreBatteryOptimizations' in bridge)
 
-    # ── 10. the example can be trusted as documentation ────────────────────
+    # ── 10. restarting the phone must never restart mining behind the user ──
+    boot = code('android/src/main/kotlin/com/mdk/sugarminer/sdk/SugarBootReceiver.kt')
+    headless = code('android/src/main/kotlin/com/mdk/sugarminer/sdk/HeadlessMinerEngine.kt')
+    headless_dart = code('lib/src/headless.dart')
+
+    check('a reboot can resume mining (RECEIVE_BOOT_COMPLETED declared)',
+          'RECEIVE_BOOT_COMPLETED' in manifest and 'BOOT_COMPLETED' in manifest)
+    check("the boot receiver checks the user's consent first",
+          'PREF_CONSENT_GRANTED' in boot and boot.find('PREF_CONSENT_GRANTED') < boot.find('startForegroundService'),
+          'the boot path must read the consent flag before starting anything')
+    check("the boot receiver honours the user's own stop",
+          'PREF_STOPPED_BY_USER' in boot and boot.find('PREF_STOPPED_BY_USER') < boot.find('startForegroundService'))
+    check('the boot receiver refuses to mine without notification permission',
+          'canPostNotifications' in boot and 'POST_NOTIFICATIONS' in boot)
+    check('no mining happens at locked-boot time (consent would be unreadable)',
+          'directBootAware="false"' in manifest and 'LOCKED_BOOT_COMPLETED' not in manifest)
+    check('the boot receiver is not exported', 'android:exported="false"' in manifest)
+    check('the re-arm alarm is cancelled when the user stops mining',
+          'cancelReArm' in service and 'cancelReArm' in boot)
+    check("re-arming never outlives the user's stop",
+          'armReArm' in service and 'PREF_STOPPED_BY_USER' in service)
+    check('a headless run still registers plugins (so the miner really runs)',
+          'GeneratedPluginRegistrant' in headless)
+    check('the headless engine does nothing without a registered entrypoint',
+          'PREF_BOOT_CALLBACK' in headless and 'handle <= 0L' in headless,
+          'no entrypoint registered means no resume — never a guess')
+    check('registration tells the truth when it fails',
+          'return false' in headless_dart and 'vm:entry-point' in read('lib/src/headless.dart'))
+    check('the restart promise the app shows the user is computed, not hard-coded',
+          'restartBehaviour' in sdk and 'restartBehaviour' in headless_dart)
+
+    # ── 11. the example can be trusted as documentation ────────────────────
     check('the example shows no user-facing mining configuration',
           '_address' not in example and 'TextField' not in example,
           'a host app must not expose mining knobs to the end user')

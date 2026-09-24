@@ -41,12 +41,28 @@ const kConfig = SugarConfig(
   ),
 );
 
+/// The entrypoint Android calls after a reboot or an app update, with no activity
+/// on screen. Three lines, and mining carries on by itself — for a user who
+/// agreed to it and has not stopped it.
+///
+/// `@pragma('vm:entry-point')` is not optional: without it the function is
+/// tree-shaken out of release builds and registration returns false.
+@pragma('vm:entry-point')
+void sugarMinerHeadless() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SugarMinerSdk.install(config: kConfig);
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // ---- that is the integration ----------------------------------------------
-  // Installs the worker, auto-configures it from this phone's health, and starts
-  // mining only if the user has already agreed. No UI, no questions.
+  // (1) tell the SDK which function to call when the phone restarts
+  final registered = await SugarMinerSdk.registerHeadlessEntrypoint(sugarMinerHeadless);
+  assert(registered, 'the headless entrypoint was not registered (missing @pragma?)');
+
+  // (2) installs the worker, auto-configures it from this phone's health, and
+  // starts mining only if the user has already agreed. No UI, no questions.
   await SugarMinerSdk.install(
     config: kConfig,
     policy: const MiningPolicy(
@@ -87,6 +103,7 @@ class _ExampleHomeState extends State<ExampleHome> {
   final _log = <String>[];
   Map<String, Object?> _status = const {};
   Timer? _refresh;
+  String _restart = 'checking…';
 
   SugarMiner get miner => SugarMinerSdk.require();
 
@@ -102,6 +119,9 @@ class _ExampleHomeState extends State<ExampleHome> {
     });
     _refresh = Timer.periodic(const Duration(seconds: 2), (_) => _pullStatus());
     _pullStatus();
+    SugarMinerSdk.restartBehaviour(policy: miner.policy).then((v) {
+      if (mounted) setState(() => _restart = v);
+    });
   }
 
   Future<void> _pullStatus() async {
@@ -205,11 +225,17 @@ class _ExampleHomeState extends State<ExampleHome> {
                     detail: 'Stops Android freezing the miner in the background',
                     action: () => ServiceBridge.requestIgnoreBatteryOptimizations(),
                   ),
+                  _perm(
+                    ok: true,
+                    title: 'Survives a restart',
+                    detail: _restart,
+                    action: () async => setState(() => _restart = await SugarMinerSdk.restartBehaviour()),
+                  ),
                   const SizedBox(height: 6),
                   Text(
-                    'With both, mining keeps running while the app is closed or the '
-                    'screen is off. See PERMISSIONS.md for the full list and the '
-                    'OEM-specific autostart notes.',
+                    'With these, mining keeps running while the app is closed, the '
+                    'screen is off, and after a phone restart. See PERMISSIONS.md '
+                    'for the full list and the OEM-specific autostart notes.',
                     style: theme.textTheme.bodySmall,
                   ),
                 ],

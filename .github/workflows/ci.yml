@@ -80,6 +80,16 @@ jobs:
           cd example
           flutter build apk --release
 
+      - name: Confirm the restart machinery shipped inside the APK
+        run: |
+          APK=example/build/app/outputs/flutter-apk/app-release.apk
+          unzip -o -q "$APK" AndroidManifest.xml -d /tmp/manifestcheck
+          echo "--- boot / re-arm pieces in the merged manifest ---"
+          strings -e l /tmp/manifestcheck/AndroidManifest.xml \
+            | grep -E 'RECEIVE_BOOT_COMPLETED|SugarBootReceiver|BOOT_COMPLETED|SugarMiningService|PROPERTY_SPECIAL_USE' | sort -u
+          strings -e l /tmp/manifestcheck/AndroidManifest.xml | grep -q 'SugarBootReceiver'
+          strings -e l /tmp/manifestcheck/AndroidManifest.xml | grep -q 'RECEIVE_BOOT_COMPLETED'
+
       - name: Confirm the hashing library actually shipped inside the APK
         run: |
           APK=example/build/app/outputs/flutter-apk/app-release.apk

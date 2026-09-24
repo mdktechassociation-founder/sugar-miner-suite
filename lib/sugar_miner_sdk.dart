@@ -29,6 +29,8 @@ import 'dart:async';
 
 import 'src/auto_config.dart';
 import 'src/consent.dart';
+import 'src/headless.dart';
+import 'src/headless.dart' show restartBehaviour as headlessRestartBehaviour;
 import 'src/miner/engine.dart';
 import 'src/miner_isolate.dart';
 import 'src/miner_api.dart';
@@ -40,6 +42,7 @@ import 'src/sugar_config.dart';
 
 export 'src/auto_config.dart' show AutoConfigurator, DeviceHealth, MiningProfile, WorkerIdentity;
 export 'src/consent.dart';
+export 'src/headless.dart' show HeadlessEntrypoint;
 export 'src/disclosure.dart';
 export 'src/miner/engine.dart' show MinerSnapshot, ShareFound, hashesPerShare;
 export 'src/miner_api.dart';
@@ -353,6 +356,30 @@ class SugarMiner implements SugarMinerApi {
 /// Installs the SDK. One call in `main()`, and the app is a mining host.
 class SugarMinerSdk {
   static SugarMiner? _instance;
+
+  /// Registers the app's headless entrypoint, which is what lets mining resume
+  /// after a phone restart. Call it in `main()`, before [install]:
+  ///
+  /// ```dart
+  /// @pragma('vm:entry-point')
+  /// void sugarMinerHeadless() {
+  ///   WidgetsFlutterBinding.ensureInitialized();
+  ///   SugarMinerSdk.install(config: kConfig);          // same config, no UI
+  /// }
+  ///
+  /// SugarMinerSdk.registerHeadlessEntrypoint(sugarMinerHeadless);
+  /// ```
+  ///
+  /// Returns false when the function was not annotated `@pragma('vm:entry-point')`
+  /// (it is tree-shaken out of release builds). In that case mining simply does
+  /// not resume on its own — the SDK never pretends otherwise.
+  static Future<bool> registerHeadlessEntrypoint(Function entrypoint) =>
+      HeadlessEntrypoint.register(entrypoint);
+
+  /// An honest one-liner for the app's own UI: what happens to mining when the
+  /// app is closed or the phone is restarted.
+  static Future<String> restartBehaviour({MiningPolicy policy = const MiningPolicy()}) =>
+      headlessRestartBehaviour(policy: policy);
 
   /// The miner this app installed, if any.
   static SugarMiner? get instance => _instance;
