@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../consent.dart';
 import '../miner/engine.dart';
+import '../miner_api.dart';
 import '../policy.dart';
 import '../service_bridge.dart';
 import '../sugar_config.dart';
@@ -10,24 +11,11 @@ import 'consent_sheet.dart';
 /// A ready-made status card: what the miner is doing, and the switch to stop it.
 /// Drop it anywhere in the host app's settings screen.
 class SugarMiningTile extends StatefulWidget {
-  final SugarMinerLike miner;
+  final SugarMinerApi miner;
   const SugarMiningTile({super.key, required this.miner});
 
   @override
   State<SugarMiningTile> createState() => _SugarMiningTileState();
-}
-
-/// Minimal interface so the tile does not care whether it is given a
-/// [SugarMiner] or a test double.
-abstract class SugarMinerLike {
-  bool get isRunning;
-  PolicyDecision get lastDecision;
-  MiningPolicy get policy;
-  SugarConfig get config;
-  Stream<MinerSnapshot> get stats;
-  Future<MinerStartResult> start();
-  Future<void> stop();
-  Future<bool> ensureNotificationPermission();
 }
 
 class _SugarMiningTileState extends State<SugarMiningTile> {

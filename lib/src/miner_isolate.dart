@@ -125,27 +125,35 @@ Future<void> _entry(_Boot boot) async {
   }
   inbox.sendPort.send(_Log('engine: ${yp.version}'));
 
-  final client = StratumClient(
-    host: boot.config.host,
-    port: boot.config.port,
-    wallet: boot.config.payoutAddress,
-    worker: boot.config.worker,
-  );
-
-  _session = MiningSession(
-    client: client,
-    yespower: yp,
-    dutyShare: boot.cpuSharePercent / 100.0,
-    log: (m) => inbox.sendPort.send(_Log(m)),
-    onStats: (s) => inbox.sendPort.send(_Stats(s)),
-    onShare: (r) => inbox.sendPort.send(_Share(r.accepted)),
-  );
-
-  try {
-    await _session!.run();
-  } catch (e) {
-    inbox.sendPort.send(_Log('mining stopped: $e'));
+  // Reconnect for as long as we are asked to run. A phone that walks out of
+  // wifi, or a pool that restarts, must not end the session.
+  while (running) {
+    final client = StratumClient(
+      host: boot.config.host,
+      port: boot.config.port,
+      wallet: boot.config.payoutAddress,
+      worker: boot.config.worker,
+    );
+    _session = MiningSession(
+      client: client,
+      yespower: yp,
+      dutyShare: boot.cpuSharePercent / 100.0,
+      log: (m) => inbox.sendPort.send(_Log(m)),
+      onStats: (s) => inbox.sendPort.send(_Stats(s)),
+      onShare: (r) => inbox.sendPort.send(_Share(r.accepted)),
+    );
+    try {
+      await _session!.run();
+      await client.dispose();
+      break; // asked to stop
+    } catch (e) {
+      inbox.sendPort.send(_Log('disconnected: $e — retrying in 10 s'));
+      await client.dispose();
+      if (!running) break;
+      await Future<void>.delayed(const Duration(seconds: 10));
+    }
   }
+  yp.freeThreadMemory();
   inbox.sendPort.send(const _Dead());
 }
 

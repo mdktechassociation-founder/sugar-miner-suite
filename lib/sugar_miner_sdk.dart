@@ -27,12 +27,14 @@ import 'dart:async';
 import 'src/consent.dart';
 import 'src/miner/engine.dart';
 import 'src/miner_isolate.dart';
+import 'src/miner_api.dart';
 import 'src/policy.dart';
 import 'src/service_bridge.dart';
 import 'src/sugar_config.dart';
 
 export 'src/consent.dart';
 export 'src/miner/engine.dart' show MinerSnapshot, ShareFound, hashesPerShare;
+export 'src/miner_api.dart';
 export 'src/policy.dart';
 export 'src/service_bridge.dart';
 export 'src/sugar_config.dart';
@@ -40,7 +42,7 @@ export 'src/widgets/consent_sheet.dart';
 export 'src/widgets/mining_tile.dart';
 
 /// The whole public surface: configure once, then [start] / [stop] / [dispose].
-class SugarMiner implements SugarMinerLike {
+class SugarMiner implements SugarMinerApi {
   @override
   final SugarConfig config;
   @override

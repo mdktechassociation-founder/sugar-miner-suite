@@ -84,7 +84,7 @@ class PolicyEngine {
     Future<void> tick() async {
       final d = await evaluate();
       if (last.isEmpty || last.last != '${d.allowed}|${d.reason}') {
-        last = [..last, '${d.allowed}|${d.reason}'];
+        last = [...last, '${d.allowed}|${d.reason}'];
         ctrl.add(d);
       }
     }

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../consent.dart';
+import '../miner_api.dart';
 import '../sugar_config.dart';
 
 /// The one dialog that makes this SDK legitimate: plain words, an explicit
 /// choice, and a "no" that is remembered.
 class SugarConsentSheet extends StatelessWidget {
-  final SugarMiner? miner;
+  final SugarMinerApi? miner;
   final String appName;
 
   const SugarConsentSheet({super.key, this.miner, this.appName = 'This app'});
@@ -15,7 +16,7 @@ class SugarConsentSheet extends StatelessWidget {
   /// Records the decision, so the app can start mining right away.
   static Future<bool> show(
     BuildContext context, {
-    SugarMiner? miner,
+    SugarMinerApi? miner,
     String appName = 'This app',
   }) async {
     final agreed = await showModalBottomSheet<bool>(
