@@ -24,9 +24,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dart-lang/setup-dart@v1
+      # Flutter's own dart, not a standalone one: `tool/qr_dump.dart` imports the
+      # encoder through the app's package, and the app's package needs the Flutter
+      # SDK to resolve at all. The encoder itself is pure Dart — it only has to be
+      # *reached* through a Flutter package, and this is that toolchain.
+      - uses: subosito/flutter-action@v2
         with:
-          sdk: stable
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - run: flutter pub get
       # The two independent implementations the encoder is checked against.
       - name: Install the reference encoder and a decoder
         run: pip install qrcode opencv-python-headless numpy
