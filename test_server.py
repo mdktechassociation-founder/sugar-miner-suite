@@ -278,6 +278,73 @@ def main():
         d = json.loads(e.read())
         ok('APK upload rejected over HTTP', e.code == 400 and d.get('kind') == 'compiled-apk')
 
+
+    print('\nthe fleet view (one address per device)')
+    ok('a fleet list parses labels and addresses',
+       S.fleet_parse('Kitchen tablet = ' + META['address'])[0] ==
+       [('Kitchen tablet', META['address'])])
+    ok('blank lines and comments are ignored',
+       S.fleet_parse('\n# a note\n' + META['address'] + '\n')[0][0][1] == META['address'])
+    ok('a line that is not an address is rejected, not silently dropped',
+       S.fleet_parse('nonsense=' + META['address'] + '\nnot-an-address')[1] == ['not-an-address'])
+
+    # The fleet endpoint, against a stubbed pool so the test does not depend on
+    # somebody else's API being up. Two addresses: one mining, one answering with
+    # nothing — which is what a paused phone looks like.
+    real_lookup = S.pool_lookup
+    quiet = 'sugar1q' + 'q' * 38
+
+    def fake_lookup(address):
+        if address == META['address']:
+            return {'sources': [{'name': 'PooLab', 'endpoint': 'x', 'totalHashrate': 250.0,
+                                 'totalShares': 7, 'balance': 0.25, 'paid': 1.5,
+                                 'immature': 0.05,
+                                 'workers': [{'name': 'w1'}, {'name': 'w2'}]}],
+                    'errors': []}
+        return {'sources': [], 'errors': ['PooLab: timeout']}
+
+    S.pool_lookup = fake_lookup
+    try:
+        fl = urllib.parse.quote('# my fleet\nFront desk = ' + META['address'] +
+                                '\nBack room = ' + quiet)
+        d = json.loads(urllib.request.urlopen(base + '/api/fleet?list=' + fl, timeout=15).read())
+        a = d['aggregate']
+        ok('fleet aggregates the addresses it could reach', d['ok'] and a['addresses'] == 2
+           and a['reachable'] == 1, json.dumps(a))
+        ok('fleet adds up hashrate, shares and money',
+           a['hashrate'] == 250.0 and a['shares'] == 7 and abs(a['balance'] - 0.25) < 1e-9
+           and a['workers'] == 2, json.dumps(a))
+        ok('an address the pool does not answer for is a row, not a crash',
+           len(d['rows']) == 2 and sum(1 for r in d['rows'] if not r['reachable']) == 1
+           and d['rows'][0]['label'] == 'Front desk')
+        ok('rows are sorted by hashrate, so the busiest device is first',
+           d['rows'][0]['hashrate'] == 250.0)
+    finally:
+        S.pool_lookup = real_lookup
+
+    try:
+        urllib.request.urlopen(base + '/api/fleet?list=', timeout=10)
+        ok('an empty fleet is refused', False)
+    except urllib.error.HTTPError as e:
+        ok('an empty fleet is refused', e.code == 400)
+
+    try:
+        many = urllib.parse.quote('\n'.join('sugar1q' + 'z' * 38 for _ in range(30)))
+        urllib.request.urlopen(base + '/api/fleet?list=' + many, timeout=10)
+        ok('a fleet larger than the limit is refused', False)
+    except urllib.error.HTTPError as e:
+        ok('a fleet larger than the limit is refused', e.code == 400)
+
+    print('\nthe engine revision the platform bakes into other people\'s apps')
+    import wrapper as W
+    ok('the wrap service is pinned to a tag, not main',
+       S.SDK_REF != 'main' and W.SDK_REF != 'main', S.SDK_REF)
+    ok('/api/health reports the pinned tag',
+       json.loads(urllib.request.urlopen(base + '/api/health', timeout=10).read())
+       .get('ref') == W.SDK_REF)
+    ok('server.py and wrapper.py agree on the tag', S.SDK_REF == W.SDK_REF,
+       f'{S.SDK_REF} vs {W.SDK_REF}')
+
     srv.shutdown()
     print(f'\n{len(PASS)} passed, {len(FAIL)} failed')
     if FAIL:

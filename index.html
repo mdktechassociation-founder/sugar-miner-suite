@@ -237,7 +237,45 @@ the whole time it runs, and you can stop it at any time.</textarea>
     </div>
   </section>
 
+  <!-- ──────────────────────── 3b. the fleet, and deploying it ───────────── -->
+  <section>
+    <h2><span class="stepnum">4</span> Run a fleet, and deploy the service</h2>
+    <p class="sub">One address is one phone. This is the same public pool data, asked once per
+      address and added up — still no telemetry from the devices, because the pool already
+      knows everything a fleet view needs. Nothing here is sent to this server: the list
+      lives in your browser.</p>
+
+    <div class="panel">
+      <label class="f">Your devices — one per line, optionally “Kitchen tablet = sugar1q…”</label>
+      <textarea id="fleetList" rows="6" spellcheck="false" style="width:100%;font-family:ui-monospace,monospace;
+        font-size:12.5px" placeholder="Front desk = sugar1q…&#10;Kitchen tablet = sugar1q…&#10;# lines starting with # are ignored"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" id="fleetBtn">Refresh the fleet</button>
+        <button class="btn ghost" id="fleetCopy">Copy a report</button>
+        <button class="btn ghost" id="fleetClear">Forget the list</button>
+      </div>
+      <p class="small muted" id="fleetNote" style="margin-top:6px">Up to 25 addresses per refresh.
+        The list is kept in this browser only.</p>
+      <div id="fleetOut" class="hidden" style="margin-top:12px"></div>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <div class="head">Hosting this service for a real deployment</div>
+      <div class="row">
+        <div><label class="f">Public host (what your developers reach)</label>
+          <input type="text" id="depHost" value="minehub.example.com"></div>
+        <div><label class="f">Port</label><input type="number" id="depPort" value="8080"></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn ghost" id="depBtn">Generate the deployment files</button>
+        <button class="btn ghost" id="depCopy">Copy all</button>
+      </div>
+      <div id="depOut" class="hidden" style="margin-top:12px"></div>
+    </div>
+  </section>
+
   <!-- ───────────────────────────── 4. honesty ──────────────────────────── -->
+
   <section>
     <h2>What this platform will not do</h2>
     <div class="panel">
@@ -1012,6 +1050,7 @@ Future<void> main() async {
 
   // ── wiring ──────────────────────────────────────────────────────────────
   function init() {
+    restoreFleet();
     const kept = localStorage.getItem('minehub.key');
     if (kept) {
       try {
@@ -1058,6 +1097,25 @@ Future<void> main() async {
     });
 
     $('#buildKitBtn').onclick = buildKit;
+    $('#fleetBtn').onclick = refreshFleet;
+    $('#fleetClear').onclick = () => {
+      $('#fleetList').value = '';
+      fleetSave();
+      $('#fleetOut').classList.add('hidden');
+      toast('Fleet list cleared from this browser', 'ok');
+    };
+    $('#fleetCopy').onclick = () => {
+      const r = fleetReport();
+      if (!r) return toast('Refresh the fleet first', 'warn');
+      copy(r, 'Fleet report');
+    };
+    $('#fleetList').addEventListener('input', fleetSave);
+    $('#depBtn').onclick = buildDeploy;
+    $('#depCopy').onclick = () => {
+      if (!state.deploy) return toast('Generate the files first', 'warn');
+      copy(Object.entries(state.deploy).map(([n, t]) => `----- ${n} -----\n${t}`).join('\n\n'),
+        'Deployment files');
+    };
     $('#wrapBtn').onclick = uploadZip;
     $('#poolBtn').onclick = checkPool;
     $('#kitCopyAll').onclick = () => {
@@ -1075,6 +1133,196 @@ Future<void> main() async {
     });
   }
 
+
+  // ── 4. the fleet, and deploying the service ─────────────────────────────
+  // A fleet is a list of addresses. The console asks the server once, the server
+  // asks each pool once, and the answer is added up here. The list never leaves
+  // this browser except as the addresses themselves, which are public.
+  const FLEET_KEY = 'minehub.fleet.v1';
+
+  function fleetText() {
+    return ($('#fleetList').value || '').trim();
+  }
+
+  function fleetSave() {
+    try { localStorage.setItem(FLEET_KEY, fleetText()); } catch (e) { /* private mode */ }
+  }
+
+  function fleetLines() {
+    return fleetText().split('\n').map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#')).length;
+  }
+
+  async function refreshFleet() {
+    const list = fleetText();
+    if (!list) return toast('Add at least one address, one per line', 'warn');
+    if (fleetLines() > 25) return toast('Up to 25 addresses per refresh', 'warn');
+
+    const out = $('#fleetOut');
+    out.classList.remove('hidden');
+    out.innerHTML = '<p class="muted">Asking the pools about ' + fleetLines() +
+      ' address(es). A cold refresh of a long list takes a few seconds…</p>';
+    try {
+      const res = await fetch('/api/fleet?list=' + encodeURIComponent(list));
+      const d = await res.json();
+      if (!d.ok) { out.innerHTML = `<p class="warn">${d.error}</p>`; return; }
+      state.fleet = d;
+      renderFleet(d);
+    } catch (e) {
+      out.innerHTML = `<p class="warn">The fleet lookup runs on the MineHub server, which is not
+        reachable from here. Start it with <code>python3 minehub/server.py</code> and open
+        <code>http://localhost:8080</code>.</p>
+        <p class="muted">No device reports to this console: the numbers come from the pools'
+        public APIs, so a fleet view costs the phones nothing.</p>`;
+    }
+  }
+
+  function renderFleet(d) {
+    const a = d.aggregate;
+    const out = $('#fleetOut');
+    const rows = d.rows.map((r) => {
+      const status = !r.reachable ? ['unreachable', 'warn']
+        : (r.hashrate > 0 ? ['mining', 'yes'] : ['idle', 'muted']);
+      return `<tr>
+        <td>${r.label}</td>
+        <td class="muted" style="font-family:ui-monospace,monospace;font-size:11.5px">${r.address}</td>
+        <td class="${status[1]}">${status[0]}</td>
+        <td>${r.reachable ? hashrate(r.hashrate) : '—'}</td>
+        <td>${r.reachable ? (r.workerCount)}</td>
+        <td>${r.reachable ? fmt(r.balance, 4) : '—'}</td>
+        <td class="muted">${r.reachable ? (r.errors && r.errors.length ? 'partial' : 'pools ok') : 'no answer'}</td>
+      </tr>`;
+    }).join('');
+
+    out.innerHTML = `
+      <div class="stats">
+        <div><span class="k">Addresses</span><span class="v">${a.addresses}</span></div>
+        <div><span class="k">Answering</span><span class="v">${a.reachable}/${a.addresses}</span></div>
+        <div><span class="k">Fleet hashrate</span><span class="v">${hashrate(a.hashrate)}</span></div>
+        <div><span class="k">Workers</span><span class="v">${a.workers}</span></div>
+        <div><span class="k">Owed in total</span><span class="v">${fmt(a.balance, 4)}</span></div>
+        <div><span class="k">Paid out</span><span class="v">${fmt(a.paid, 4)}</span></div>
+      </div>
+      ${d.rejected && d.rejected.length ? `<p class="warn small">Ignored, not SUGAR addresses:
+         ${d.rejected.join(', ')}</p>` : ''}
+      <table class="check" style="margin-top:10px">
+        <tr><th>Device</th><th>Address</th><th>Status</th><th>Hashrate</th><th>Workers</th>
+            <th>Owed</th><th>Pools</th></tr>${rows}
+      </table>
+      <p class="muted small" style="margin-top:8px">Read ${ago(d.fetchedAt)}. “idle” means the
+        address answered with no hashrate — a phone that is paused for heat, battery or data looks
+        exactly like that, and so does one that was never started.</p>`;
+  }
+
+  function fleetReport() {
+    const d = state.fleet;
+    if (!d) return null;
+    const a = d.aggregate;
+    return [
+      'MineHub fleet report',
+      'read: ' + new Date(d.fetchedAt * 1000).toISOString(),
+      `addresses: ${a.addresses} (answering ${a.reachable})`,
+      `fleet hashrate: ${hashrate(a.hashrate)} over ${a.workers} worker(s)`,
+      `owed: ${a.balance} SUGAR · paid: ${a.paid} SUGAR · immature: ${a.immature} SUGAR`,
+      '',
+      ...d.rows.map((r) => `${r.label}  ${r.address}  ` +
+        (r.reachable ? `${hashrate(r.hashrate)}, ${r.workerCount} worker(s), owed ${r.balance}`
+                     : 'no answer from the pool')),
+      '',
+      'Numbers come from the pools\' public APIs, not from the devices.',
+    ].join('\n');
+  }
+
+  function deployFiles(host, port) {
+    const service = `[Unit]
+Description=MineHub — SUGAR wallet, wrap service and fleet console
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/minehub
+ExecStart=/usr/bin/python3 server.py
+Environment=PORT=${port}
+Restart=on-failure
+RestartSec=3
+# The wrap step runs a Flutter build and an APK inspection: give it room, but keep
+# it unprivileged. It writes only to its own temp directory.
+DynamicUser=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
+`;
+
+    const proxy = `server {
+    listen 443 ssl;
+    server_name ${host};
+
+    # Wraps of a real project can be a few hundred megabytes.
+    client_max_body_size 512m;
+
+    location / {
+        proxy_pass http://127.0.0.1:${port};
+        proxy_read_timeout 900s;
+        proxy_request_buffering off;
+    }
+}
+`;
+
+    const checklist = `# MineHub deployment checklist
+
+## 1. The service
+  install:   python3 -m venv /opt/minehub/.venv && /opt/minehub/.venv/bin/pip install -r requirements.txt
+  run:       cd /opt/minehub && python3 server.py     (binds 0.0.0.0:${port})
+  systemd:   /etc/systemd/system/minehub.service      (generated above)
+  TLS:       put it behind a reverse proxy; add the 512 MB body limit for wraps
+  health:    curl -fsS http://127.0.0.1:${port}/api/health     → {"ok":true,"ref":"v2.0.0"}
+  wallet:    nothing to back up — this service never holds a key. The wrap service
+             bakes a PUBLIC address into other people's projects, and that is all it knows.
+
+## 2. The engine version
+  SDK_REF in server.py is pinned to a tag (v2.0.0), not \`main\`. Wraps of your users'
+  apps therefore always compile the engine you tested. Bumping it is a deliberate
+  commit: re-run test_server.py, then update the tag in one place.
+
+## 3. The devices
+  one address per device, or one per site     — a fleet report is readable either way
+  install path                                — MDM, kiosk profile, or sideload; Play
+                                                Store policy does not allow mining apps
+  notification permission                     — Android 13+ asks; a user who says no
+                                                cannot be mined for, and the SDK says so
+  battery optimisation                        — the SDK offers the system dialog, per device
+  disclosure                                  — your terms, your notice, your wording; the
+                                                SDK refuses to start without both. A fleet is
+                                                still people: each phone's owner agreed
+
+## 4. What a fleet will and will not do
+  A phone does 100–400 H/s. Fifty phones with 25% duty is still a small number, and it is
+  thirty to a few hundred dollars a month of electricity-shaped goodwill, not revenue.
+  Say that in your own words before someone installs this on someone else's phone.
+`;
+
+    return { service, proxy, checklist };
+  }
+
+  async function buildDeploy() {
+    const host = ($('#depHost').value || 'minehub.example.com').trim();
+    const port = ($('#depPort').value || '8080').trim();
+    const f = deployFiles(host, port);
+    state.deploy = f;
+    const out = $('#depOut');
+    out.classList.remove('hidden');
+    out.innerHTML = [
+      ['/etc/systemd/system/minehub.service', f.service],
+      [`/etc/nginx/sites-available/${host}`, f.proxy],
+      ['DEPLOYMENT.md', f.checklist],
+    ].map(([name, body]) => `<div class="head">${name}</div>
+      <pre class="detect" style="max-height:300px;overflow:auto">${body.replace(/[<>&]/g,
+        (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</pre>`).join('');
+    toast('Deployment files generated', 'ok');
+  }
+
   // base58 decode is only needed for WIF import; keep it local and small
   function atobHex(b58) {
     const A = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -1090,7 +1338,14 @@ Future<void> main() async {
     return Uint8Array.from(bytes);
   }
 
-  window.MineHub = { checkPool, buildKit, state };
+  // The fleet list is restored from this browser's storage, so a console reload does
+  // not lose which phone is which.
+  function restoreFleet() {
+    try { $('#fleetList').value = localStorage.getItem(FLEET_KEY) || ''; } catch (e) { /* */ }
+  }
+
+  window.MineHub = { checkPool, buildKit, refreshFleet, buildDeploy, deployFiles, state,
+                     restoreFleet };
   document.addEventListener('DOMContentLoaded', init);
 })();
 </script>

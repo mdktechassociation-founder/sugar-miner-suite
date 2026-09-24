@@ -119,6 +119,30 @@ stock build and cannot leak a thing that the pool does not already know.
 The API is cached for 60 seconds; a fresh address with no shares returns zeros,
 which is correct rather than broken.
 
+## 4. The fleet, and hosting it
+
+One address is one phone; a fleet is a list of them. The Fleet panel asks the server
+once (up to 25 addresses per refresh, `Name = sugar1q…` per line, labels optional) and
+the server asks each pool once, so a refresh of a long list does not look like a burst
+from a browser. The rows come back sorted by hashrate with a status of **mining**,
+**idle** or **no answer**, plus totals: fleet hashrate, workers, owed, paid. The list
+stays in the browser's own storage — it is a list of public addresses, not an account.
+
+An **idle** row is not an error: a phone paused for heat, battery or metered data looks
+exactly like one that was never started, and the SDK's own reason is on the phone, not
+in the pool. Nothing here is telemetry — the numbers are the pools' public API, which
+knows your address anyway because it mines to it.
+
+The same panel generates the deployment files for running this service for real: a
+`systemd` unit (unprivileged, `DynamicUser`, private tmp), an nginx site with the 512 MB
+body limit wraps need, and a checklist that starts with the part people skip — the
+engine tag is pinned (`SDK_REF = v2.0.0`), and every device's owner still has to agree.
+
+```bash
+python3 server.py          # 0.0.0.0:8080, console + /api/wallet + /api/pool + /api/fleet + /api/wrap
+curl -fsS localhost:8080/api/health   # {"ok":true,"ref":"v2.0.0"}
+```
+
 ## What this platform will not do
 
 - **Hide the notification.** No API exists in the SDK, and this console does not

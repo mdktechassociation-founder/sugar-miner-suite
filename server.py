@@ -26,6 +26,7 @@ What it does, and just as importantly what it refuses to do:
 
     python3 server.py            # http://localhost:8080
 """
+import concurrent.futures
 import io
 import json
 import os
@@ -43,7 +44,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORK = os.path.join(tempfile.gettempdir(), 'minehub-work')
 SDK_GIT = 'https://github.com/mdktechassociation-founder/sugar-miner-sdk.git'
-SDK_REF = 'main'
+# Pinned on purpose. The wrap service bakes this SDK into other people's apps, so
+# `main` would mean the engine inside a developer's released build changes whenever
+# this repository does, without their build noticing. Move this only when a tag has
+# been tested end to end: bump it, re-run test_server.py, and the wrap report names
+# the tag it used, so any APK can be traced back to an exact engine revision.
+SDK_REF = 'v2.0.0'
 MAX_UPLOAD = 200 * 1024 * 1024
 CACHE = {}
 
@@ -165,6 +171,86 @@ def pool_lookup(address):
     return out
 
 
+# ─────────────────────────────────────────────────────────────── the fleet ──
+# One address is a phone. Fifty addresses are a deployment: a shop's terminals, a
+# kiosk chain, a shelf of donated handsets. This is the same public pool data as
+# /api/pool, asked once per address and added up — there is still no telemetry from
+# the phones, because the pool already knows everything a fleet view needs.
+
+FLEET_MAX = 25
+
+
+def fleet_parse(raw):
+    """Parses the fleet list: one address per line, optionally `Name = address`.
+
+    Returns (accepted, rejected) where accepted is [(label, address)]. A label is
+    how a person tells their own devices apart; the pool has its own worker names
+    and they are not always the same thing.
+    """
+    accepted, rejected = [], []
+    for line in (raw or '').splitlines():
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        label, address = '', line
+        if '=' in line:
+            label, address = (part.strip() for part in line.split('=', 1))
+        if not sdk_check(address):
+            rejected.append(line)
+            continue
+        accepted.append((label or address[:12] + '…', address))
+    return accepted, rejected
+
+
+def fleet_lookup(pairs):
+    """The rows for a fleet, fetched concurrently, plus the totals across it."""
+    fetched = int(time.time())
+    rows = []
+
+    def one(pair):
+        label, address = pair
+        try:
+            data = pool_lookup(address)
+        except Exception as e:                                    # noqa: BLE001
+            return {'label': label, 'address': address, 'reachable': False, 'error': str(e)}
+        sources = data.get('sources') or []
+        primary = sources[0] if sources else {}
+        workers = primary.get('workers') or []
+        return {
+            'label': label,
+            'address': address,
+            'reachable': bool(sources),
+            'hashrate': primary.get('totalHashrate', 0) or 0,
+            'shares': primary.get('totalShares', 0) or 0,
+            'balance': primary.get('balance', 0) or 0,
+            'paid': primary.get('paid', 0) or 0,
+            'immature': primary.get('immature', 0) or 0,
+            'workerCount': len(workers),
+            'workers': workers[:20],
+            'sources': [s.get('name') for s in sources],
+            'errors': data.get('errors') or [],
+        }
+
+    # Modest concurrency: this is somebody else's public API, and a fleet refresh
+    # from one console should not look like a burst from one console.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        for row in pool.map(one, pairs):
+            rows.append(row)
+
+    rows.sort(key=lambda r: -(r.get('hashrate') or 0))
+    aggregate = {
+        'addresses': len(rows),
+        'reachable': sum(1 for r in rows if r['reachable']),
+        'hashrate': sum(r.get('hashrate') or 0 for r in rows),
+        'shares': sum(r.get('shares') or 0 for r in rows),
+        'balance': sum(r.get('balance') or 0 for r in rows),
+        'paid': sum(r.get('paid') or 0 for r in rows),
+        'immature': sum(r.get('immature') or 0 for r in rows),
+        'workers': sum(r.get('workerCount') or 0 for r in rows),
+    }
+    return {'ok': True, 'fetchedAt': fetched, 'aggregate': aggregate, 'rows': rows}
+
+
 # ────────────────────────────────────────────────────────── the wrap step ──
 from wrapper import (APK_REFUSAL, METADATA, WORK, wrap_zip, wrap_flutter)  # noqa: E402,F401
 
@@ -212,6 +298,23 @@ class Handler(BaseHTTPRequestHandler):
                                         '(sugar1q... on mainnet, tugar1q... on testnet).'})
             data = pool_lookup(address)
             data['ok'] = True
+            return self._send(200, data)
+
+        if url.path == '/api/fleet':
+            raw = (q.get('list') or q.get('addresses') or [''])[0]
+            pairs, rejected = fleet_parse(raw)
+            if not pairs:
+                return self._send(400, {'ok': False, 'error':
+                                        'No SUGAR addresses in that list. One per line, '
+                                        'optionally "Kitchen tablet = sugar1q…".',
+                                        'rejected': rejected})
+            if len(pairs) > FLEET_MAX:
+                return self._send(400, {'ok': False, 'error':
+                                        f'{len(pairs)} addresses is more than one refresh '
+                                        f'should ask for (limit {FLEET_MAX}). Split the '
+                                        f'list, or run your own copy of this service.'})
+            data = fleet_lookup(pairs)
+            data['rejected'] = rejected
             return self._send(200, data)
 
         m = re.match(r'^/api/wrap/([0-9a-f]{6,32})/(download|report)$', url.path)

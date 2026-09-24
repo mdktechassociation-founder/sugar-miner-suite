@@ -28,7 +28,11 @@ import uuid
 import zipfile
 
 SDK_GIT = 'https://github.com/mdktechassociation-founder/sugar-miner-sdk.git'
-SDK_REF = 'main'
+# The engine revision baked into every wrapped project. Pinned to a tag, never
+# `main`: a wrap produces an app somebody ships, and the engine inside it must be
+# the one this service was tested against. server.py reports the same tag from
+# /api/health, and test_server.py fails the build if the two ever drift apart.
+SDK_REF = 'v2.0.0'
 WORK = os.path.join(tempfile.gettempdir(), 'minehub-work')
 
 METADATA = [
