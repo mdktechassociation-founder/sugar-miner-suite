@@ -28,7 +28,7 @@ jobs:
     name: native hashing core self-test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build the C library and check the genesis PoW hash
         run: python3 tools/selftest.py
 
@@ -38,9 +38,9 @@ jobs:
     needs: native-core
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
@@ -67,7 +67,7 @@ jobs:
       - name: List what was built
         run: ls -la build/app/outputs/flutter-apk/ || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sugar-miner-apk
           path: build/app/outputs/flutter-apk/*.apk
@@ -81,8 +81,8 @@ jobs:
     needs: native-core
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
@@ -92,7 +92,7 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter build apk --release
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sugar-miner-apk-universal
           path: build/app/outputs/flutter-apk/app-release.apk
