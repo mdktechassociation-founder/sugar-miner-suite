@@ -14,7 +14,7 @@ The short version of what this is for: **the app is free, and the user pays with
 spare computing power instead of money.** The developer writes that deal down, the
 user agrees to it once, and the SDK does the rest quietly in the background.
 
-> Telugu/Tenglish guide: **[HOWTO-Telugu.md](HOWTO-Telugu.md)**
+> Developer guide, end to end: **[HOWTO.md](HOWTO.md)**
 > Permissions and what "24/7" really takes: **[PERMISSIONS.md](PERMISSIONS.md)**
 
 ## The one rule this SDK is built around
