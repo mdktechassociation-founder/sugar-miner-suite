@@ -7,3 +7,4 @@ android/.gradle/
 android/app/.cxx/
 *.iml
 .idea/
+pubspec_overrides.yaml

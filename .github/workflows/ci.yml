@@ -19,6 +19,23 @@ jobs:
       - name: Run the vectors
         run: dart run packages/sugar_wallet/test/wallet_vectors.dart
 
+  qr-symbol:
+    name: the QR code is correct, and a real scanner reads it
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      # The two independent implementations the encoder is checked against.
+      - name: Install the reference encoder and a decoder
+        run: pip install qrcode opencv-python-headless numpy
+      # Three questions per test string: does it agree with a second encoder at a
+      # pinned mask, is the version/size right, and can OpenCV read it back exactly.
+      # A QR that looks right but does not scan is the failure this catches.
+      - name: Check the symbol
+        run: python3 tools/check_qr.py
+
   guardrails:
     name: the wallet is the user's, the mining is visible
     runs-on: ubuntu-latest
@@ -29,7 +46,7 @@ jobs:
 
   app:
     name: analyze and build the APK
-    needs: [wallet-vectors, guardrails]
+    needs: [wallet-vectors, guardrails, qr-symbol]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -50,6 +67,11 @@ jobs:
 
       - name: Analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      # Unit and widget tests: the price/hashrate history rules, the receive
+      # screen, and the encoder's own edge cases.
+      - name: Test
+        run: flutter test
 
       - name: Build the release APK
         run: flutter build apk --release

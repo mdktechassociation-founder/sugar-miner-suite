@@ -1,8 +1,9 @@
 # Privacy policy — SUGAR Wallet
 
 The short version: **the app has no account, no analytics, and no server of ours.
-It talks to one public mining pool, and it tells it one thing — your wallet
-address.**
+It talks to one public mining pool, which it tells one thing — your wallet
+address — and it asks one public price feed one question — what is SUGAR worth —
+which is a question about the coin and not about you.**
 
 ## What leaves the device
 
@@ -11,6 +12,7 @@ address.**
 | Your wallet **address** | `stratum.poolab.org:8451` (the mining pool) | the pool must know where to credit the mined SUGAR |
 | Your wallet **address** | `poolab.org` (its public stats API) | so the app can show your hashrate, balance and device list |
 | Share submissions | the same pool, over the same connection | that is what mining is |
+| **Nothing about you** | `api.coingecko.com` | so the app can say what your balance is worth in dollars. The request is a fixed public URL that names the coin (`sugarchain`) and asks for its price; it carries no address, no wallet, no device id and no key |
 
 The address is public information: it is the same string anyone can look up on a
 blockchain explorer to see the balance. It is not linked to any name, email, phone
@@ -45,6 +47,12 @@ address whose key you have deleted.
 The mining pool sees your address and your share submissions. It has its own
 privacy policy; this app does not control it. Blockchain explorers can see the
 address and its balance, because that is what a public blockchain is.
+
+The price feed (CoinGecko) is the only other host this app contacts. It is a
+plain unauthenticated GET to a fixed public URL asking for the price of one coin;
+because the app sends no identifier, the request cannot be tied to your wallet or
+to this device. The app works without it — if the feed is unreachable the dollar
+figures show a dash and mining carries on regardless.
 
 There is no other third party. Nothing is sold, shared, or brokered, because
 nothing is collected.

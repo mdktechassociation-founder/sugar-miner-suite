@@ -79,10 +79,26 @@ def main():
           and 'method: \'POST\'' not in everything
           and '.post(' not in everything,
           'no POST exists in this app, so no data can be uploaded')
-    check('the only host contacted is the pool',
-          set(re.findall(r'https?://([a-z0-9.\-]+)', everything)) <= {
-              'poolab.org', 'github.com', 'sugar.bitaps.com'},
-          str(sorted(set(re.findall(r'https?://([a-z0-9.\-]+)', everything)))))
+    # api.coingecko.com is here deliberately, and it is the only third party this
+    # app ever added. It is asked one fixed question — what is SUGAR worth — and
+    # the request carries no address, no identifier and no key. The three checks
+    # around it are the price of letting it in: the URL must stay that exact
+    # public one, the app must survive it being down, and the policy must say so.
+    hosts = set(re.findall(r'https?://([a-z0-9.\-]+)', everything))
+    check('the only hosts contacted are the pool, an explorer, and the named price feed',
+          hosts <= {'poolab.org', 'github.com', 'sugar.bitaps.com', 'api.coingecko.com'},
+          str(sorted(hosts)))
+    check('the price feed is asked one fixed question and nothing about the user',
+          'api.coingecko.com/api/v3/simple/price?ids=sugarchain&vs_currencies=usd'
+          in everything,
+          'the price URL must be a constant with no address, device id or key in it')
+    check('a price feed that is down leaves the app usable rather than blank',
+          "'price unknown'" in sources.get('lib/screens/home.dart', '')
+          and 'no live price' in sources.get('lib/screens/home.dart', ''),
+          'the money side of the screen must degrade to a dash, never to a guess')
+    check('the price feed is disclosed in the privacy policy',
+          'api.coingecko.com' in read('PRIVACY.md'),
+          'a third party the app talks to belongs in the policy, not only in the code')
 
     # ── 2. mining stays visible and consented ──────────────────────────────
     check('consent goes through the SDK\'s own screen, so the answer is recorded by it',
