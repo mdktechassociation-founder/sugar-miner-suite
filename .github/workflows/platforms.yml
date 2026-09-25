@@ -85,6 +85,11 @@ jobs:
         run: |
           flutter pub get
           flutter build windows --release
+          # same as the wallet above: the loader wants the DLL beside the exe, and
+          # without it the app builds and then cannot mine
+          OUT=$(dirname "$(find build/windows -name '*.exe' -path '*Release*' | head -1)")
+          cp ../sugar-miner-sdk/native/yespower/yespower.dll "$OUT/"
+          ls "$OUT" | grep -i yespower
 
   macos:
     name: desktop — macos
@@ -92,6 +97,18 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v7
+
+      # macOS used to build both apps and stop there, which meant a green job and
+      # an app that could not mine: nothing produced the core, so the loader found
+      # no library and the engine refused. clang compiles the same C the other
+      # platforms use (the AVX/XOP notes in the log are expected, not errors).
+      - name: Build the mining core (clang)
+        run: |
+          cd sugar-miner-sdk/native/yespower
+          clang -O2 -fPIC -shared -o libyespower.dylib \
+            yp_bridge.c yespower-opt.c sha256.c -I.
+          ls -la libyespower.dylib
+
       - uses: subosito/flutter-action@v2
         with: { flutter-version: '3.47.5', channel: stable, cache: true }
 
@@ -100,12 +117,23 @@ jobs:
         run: |
           flutter pub get
           flutter build macos --release
+          # where the loader now looks, and where a Flutter .app is expected to
+          # carry native code. Note: adding a file to a signed .app invalidates the
+          # signature, so a distributed build re-signs after this step.
+          APP=$(find build/macos/Build/Products/Release -maxdepth 1 -name '*.app' | head -1)
+          mkdir -p "$APP/Contents/Frameworks"
+          cp ../sugar-miner-sdk/native/yespower/libyespower.dylib "$APP/Contents/Frameworks/"
+          ls "$APP/Contents/Frameworks" | grep -i yespower
 
       - name: Miner app (macos)
         working-directory: sugar-miner-app
         run: |
           flutter pub get
           flutter build macos --release
+          APP=$(find build/macos/Build/Products/Release -maxdepth 1 -name '*.app' | head -1)
+          mkdir -p "$APP/Contents/Frameworks"
+          cp ../sugar-miner-sdk/native/yespower/libyespower.dylib "$APP/Contents/Frameworks/"
+          ls "$APP/Contents/Frameworks" | grep -i yespower
 
   web:
     name: web — the wallet only, and it says so

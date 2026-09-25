@@ -1,4 +1,5 @@
 import 'dart:ffi';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -37,13 +38,33 @@ class Yespower {
   static Yespower? _instance;
 
   /// Opens the native library. Tries the Android name first, then the desktop
+  /// Concrete paths to try on macOS, derived from where this binary actually is.
+  static List<String> _macOsPaths() {
+    try {
+      final exe = Platform.resolvedExecutable; // …/App.app/Contents/MacOS/App
+      final macos = exe.substring(0, exe.lastIndexOf('/'));
+      return [
+        '@rpath/libyespower.dylib',
+        '$macos/../Frameworks/libyespower.dylib',
+        '$macos/libyespower.dylib',
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
   /// names so the same code can be tested on Linux/macOS during development.
   static Yespower load() {
     if (_instance != null) return _instance!;
     final candidates = [
-      'libyespower.so', // Android + Linux
-      'yespower.dll', // Windows
-      'libyespower.dylib', // macOS
+      'libyespower.so', // Android + Linux: the loader searches the app's own dir
+      'yespower.dll', // Windows: likewise, beside the executable
+      'libyespower.dylib', // macOS leaf name
+      // macOS does not search the executable's directory for a bare name, the way
+      // Windows and Linux do. A Flutter .app is laid out with the core in
+      // Contents/Frameworks (and, if someone copies it there by hand, next to the
+      // binary), so those two paths are tried by name as well.
+      if (Platform.isMacOS) ..._macOsPaths(),
     ];
     Object? last;
     for (final name in candidates) {
