@@ -60,11 +60,11 @@
 
   <div class="card">
     <h2>Connection</h2>
-    <div class="banner"><b>Before mining:</b> paste <i>your own</i> bridge URL above (or open this page with <code class="inl">?ws=wss://your-bridge.workers.dev</code>) and <i>your own</i> <code class="inl">sugar1q…</code> payout address. Nothing is mined until you do — those fields are intentionally left empty here.</div>
+    <div class="banner"><b>Before mining:</b> the bridge is pre-filled with this project's public Stratum proxy — replace it with your own if you prefer, or open this page with <code class="inl">?ws=wss://stratum-proxy.mdktechassociation.workers.dev</code>. Enter <i>your own</i> <code class="inl">sugar1q…</code> payout address: <b>nothing is mined until you do</b>, and the coins go to that address.</div>
     <div class="row">
       <div class="f grow">
         <label>WebSocket proxy (stratum)</label>
-        <input id="url" value="" placeholder="wss://your-bridge.workers.dev" spellcheck="false">
+        <input id="url" value="wss://stratum-proxy.mdktechassociation.workers.dev" placeholder="wss://your-bridge.workers.dev" spellcheck="false">
       </div>
       <div class="f narrow">
         <label>Worker name</label>

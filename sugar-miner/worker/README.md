@@ -15,7 +15,7 @@ Cloudflare Worker  ──connect()──►  stratum.poolab.org:8451   (yespower
 npm install -g wrangler
 wrangler login                     # opens the browser, one time
 cd sugar-worker
-wrangler deploy                    # prints https://sugar-bridge.<you>.workers.dev
+wrangler deploy                    # prints the worker URL (this repo's is below)
 ```
 
 Optional but recommended — lock it to your own page so strangers can't use your
@@ -32,9 +32,9 @@ Worker as a free open relay (Workers dashboard → your worker → Settings → 
 Open `SUGAR_MINER_SINGLE_FILE.html` and either
 
 * edit the **WebSocket proxy (stratum)** field to
-  `wss://sugar-bridge.<you>.workers.dev`, or
+  `wss://stratum-proxy.mdktechassociation.workers.dev` (this project's bridge), or
 * append `?ws=` to the page URL:
-  `SUGAR_MINER_SINGLE_FILE.html?ws=wss://sugar-bridge.<you>.workers.dev`
+  `SUGAR_MINER_SINGLE_FILE.html?ws=wss://stratum-proxy.mdktechassociation.workers.dev`
 
 **Before you press Connect & mine:** replace the payout address — the file ships
 with someone else's wallet in that box.

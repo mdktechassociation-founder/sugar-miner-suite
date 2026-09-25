@@ -1,9 +1,16 @@
-name = "sugar-bridge"
+# This is the deployed worker's name. It used to say "sugar-bridge", which would
+# have made `wrangler deploy` create a *second* worker instead of updating the one
+# the page uses — the page would then point at a bridge nobody deploys.
+name = "stratum-proxy"
 main = "worker.js"
 compatibility_date = "2026-09-01"
 
-# Optional: uncomment to lock the bridge to your own pages.
+# Optional, and worth doing: lock the bridge to your own pages.
+#
+# Unset means `*` — anybody who finds the URL can route their own mining through
+# this worker, on your Cloudflare account. The page below is the one it is for.
+#
 # [vars]
-# ALLOWED_ORIGINS = "https://your-site.example,http://localhost:8080"
+# ALLOWED_ORIGINS = "https://mdktechassociation-founder.github.io,http://localhost:8080,http://localhost:8081"
 # POOL_HOST = "stratum.poolab.org"
 # POOL_PORT = "8451"

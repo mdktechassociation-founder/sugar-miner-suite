@@ -39,7 +39,7 @@ swallows the base64 blobs — or just trust CI, which **fails the build if any
 ```bash
 # 1. deploy the bridge
 npm install -g wrangler && wrangler login
-cd worker && wrangler deploy          # prints https://sugar-bridge.<you>.workers.dev
+cd worker && wrangler deploy          # updates this project's bridge
 
 # 2. open the miner
 open site/index.html
@@ -48,7 +48,7 @@ open site/index.html
 Give the page your bridge and your wallet, either in the two form fields or in the URL:
 
 ```
-https://<you>.github.io/sugar-miner/?ws=wss://sugar-bridge.<you>.workers.dev
+https://mdktechassociation-founder.github.io/sugar-miner-suite/?ws=wss://stratum-proxy.mdktechassociation.workers.dev
 ```
 
 **Use your own `sugar1q…` address.** That is the only thing the pool pays out to.
