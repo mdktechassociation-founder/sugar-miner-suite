@@ -41,6 +41,38 @@ on the screen rather than left to be discovered.
 CI builds all of these on their own machines (`.github/workflows/platforms.yml`), so
 "supported" means "it built", not "it should".
 
+## The wallet makes its own wallets, with no server anywhere
+
+`sugar-wallet-miner` creates wallets on the device and keeps the key in the platform
+keystore. Two kinds, both offline:
+
+- **Twelve words (the default).** A BIP-39 phrase generated from the phone's secure
+  random source. The key is derived at `m/44'/408'/0'/0/0` — 408 is Sugarchain's
+  registered coin type in SLIP-0044 — and the app shows the words numbered, for
+  paper. It also keeps an xprv, which is what a BIP-32-capable wallet wants.
+- **A raw key**, for someone importing by hand.
+
+What restores where — this is the compatibility that matters, and it is checked by
+tests rather than asserted:
+
+| you keep | restores in |
+|---|---|
+| the twelve words | any BIP-39 wallet that follows BIP-44 with coin type 408 |
+| the WIF | Sugarchain Core (`importprivkey`) and the Sugarchain web wallet |
+| the xprv | any wallet with a BIP-32 tab, including that web wallet |
+| the backup file (JSON) | this app, via the import field, or by hand anywhere |
+
+The import field accepts all four, so a restore is one paste whichever form the
+backup is in. Core's own wallet derives at its own `m/0'/0'/k'` scheme and has no
+phrase support — the WIF is the bridge to it, and that is why the app still prints
+one.
+
+The crypto is in `sugar-wallet-miner/packages/sugar_wallet`, still with no package
+dependencies: SHA-512, HMAC-SHA512, PBKDF2, BIP-39 and BIP-32 are written out and
+pinned by published vectors — NIST digests, RFC 4231, the BIP-39 reference set, and
+BIP-32 test vector 1 six chains deep. The composed claim (these words make this
+address) is cross-checked against `bip-utils`, a second implementation.
+
 ## How the phases fit together
 
 ```

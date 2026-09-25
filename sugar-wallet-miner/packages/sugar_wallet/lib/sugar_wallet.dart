@@ -19,7 +19,13 @@ export 'src/sugar_wallet.dart'
         base58Check,
         base58CheckDecode,
         hash160Of,
+        compressedPubkeyOf,
         toHex,
         fromHex;
+export 'src/bip32.dart' show ExtKey, sugarBip44Path;
+export 'src/bip39.dart' show Mnemonic;
+export 'src/hmac.dart' show HmacSha512, Pbkdf2;
+export 'src/phrase_wallet.dart' show PhraseWallet;
 export 'src/ripemd160.dart' show Ripemd160;
+export 'src/sha512.dart' show Sha512;
 export 'src/sha256.dart' show Sha256;

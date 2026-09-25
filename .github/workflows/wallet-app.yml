@@ -30,6 +30,11 @@ jobs:
       # No package dependencies to resolve: the wallet package has none, on purpose.
       - name: Run the vectors
         run: dart run packages/sugar_wallet/test/wallet_vectors.dart
+      # SHA-512, HMAC, BIP-39, BIP-32 and the Sugarchain phrase→address composition.
+      # Consuming wallets will restore from these words; a mistake here is a wallet
+      # that opens somewhere else and is empty.
+      - name: Run the phrase vectors
+        run: dart run packages/sugar_wallet/test/hd_vectors.dart
 
   qr-symbol:
     name: the QR code is correct, and a real scanner reads it

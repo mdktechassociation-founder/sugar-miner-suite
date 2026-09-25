@@ -32,6 +32,7 @@ class _WalletScreenState extends State<WalletScreen> {
   bool _showKey = false;
   Map<String, String?> _details = const {};
   final _importController = TextEditingController();
+  String? _phrase; // present when this wallet came from words
   String? _importError;
   bool _busy = false;
 
@@ -39,7 +40,12 @@ class _WalletScreenState extends State<WalletScreen> {
   void initState() {
     super.initState();
     WalletStore.details().then((d) {
-      if (mounted) setState(() => _details = d);
+      if (mounted) {
+        setState(() {
+          _details = d;
+          _phrase = d['phrase'];
+        });
+      }
     });
   }
 
@@ -65,7 +71,9 @@ class _WalletScreenState extends State<WalletScreen> {
       _importError = null;
     });
     try {
-      final wallet = SugarWallet.import(_importController.text);
+      // One entry point for every form of secret the user might have: 12 or 24
+      // words, an xprv, a WIF, or a raw hex key.
+      final wallet = await WalletStore.restore(_importController.text);
       // Stop the old miner before pointing mining somewhere else: two addresses
       // submitting shares at once would be two half-answers to one question.
       await SugarMinerSdk.instance?.stop();
@@ -166,11 +174,66 @@ class _WalletScreenState extends State<WalletScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'The key below is the wallet. Anyone who has it can spend your SUGAR; '
-                  'nobody without it can, including this app\'s developer.',
-                  style: TextStyle(color: kMuted, fontSize: 12.5, height: 1.5),
+                Text(
+                  _phrase != null
+                      ? 'These twelve words are the wallet. Anyone who has them can spend '
+                          'your SUGAR; nobody without them can, including this app\'s '
+                          'developer. Paper survives a dropped phone; a screenshot does not.'
+                      : 'The key below is the wallet. Anyone who has it can spend your SUGAR; '
+                          'nobody without it can, including this app\'s developer.',
+                  style: const TextStyle(color: kMuted, fontSize: 12.5, height: 1.5),
                 ),
+                if (_phrase != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                    decoration: BoxDecoration(
+                      color: kPanel,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: kLine),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('RECOVERY PHRASE',
+                            style: TextStyle(fontSize: 11, letterSpacing: 1.1, color: kMuted)),
+                        const SizedBox(height: 8),
+                        SelectableText(
+                          _phrase!
+                              .split(' ')
+                              .asMap()
+                              .entries
+                              .map((e) => '${e.key + 1}. ${e.value}')
+                              .join('   '),
+                          style: const TextStyle(
+                              fontFamily: 'monospace', fontSize: 13.5, height: 1.6),
+                        ),
+                        if (_details['path'] != null) ...[
+                          const SizedBox(height: 8),
+                          Text('Path ${_details['path']}',
+                              style: const TextStyle(color: kMuted, fontSize: 11.5)),
+                        ],
+                        Row(
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                // taken before the await: the messenger outlives this
+                                // frame, the context may not
+                                final messenger = ScaffoldMessenger.of(context);
+                                await Clipboard.setData(ClipboardData(text: _phrase!));
+                                messenger.showSnackBar(const SnackBar(
+                                    content: Text('Words copied — paper, not a chat.')));
+                              },
+                              icon: const Icon(Icons.copy, size: 18),
+                              label: const Text('Copy the words'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 if (w == null)
                   const Text(
@@ -238,8 +301,10 @@ class _WalletScreenState extends State<WalletScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Paste a WIF or a 64-character hex key. This replaces the wallet on this '
-                  'device and stops mining until you start it again.',
+                  'Paste your twelve words, an xprv, a WIF, or a 64-character hex key. '
+                  'This replaces the wallet on this device and stops mining until you start '
+                  'it again. Restoring from words rebuilds the same addresses the words were '
+                  'made from — nothing is sent anywhere to do it.',
                   style: TextStyle(color: kMuted, fontSize: 12.5, height: 1.5),
                 ),
                 const SizedBox(height: 10),
@@ -248,7 +313,7 @@ class _WalletScreenState extends State<WalletScreen> {
                   obscureText: true,
                   cursorColor: kAccent,
                   decoration: InputDecoration(
-                    hintText: 'K… or 64 hex characters',
+                    hintText: 'words, xprv…, K…, or hex',
                     filled: true,
                     fillColor: kPanel2,
                     border: OutlineInputBorder(

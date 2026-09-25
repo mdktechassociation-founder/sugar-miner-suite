@@ -28,14 +28,26 @@ enum _Step { welcome, backup, consent }
 class _OnboardingScreenState extends State<OnboardingScreen> {
   _Step _step = _Step.welcome;
   SugarWallet? _wallet;
+  String? _phrase; // set when the wallet was made from words
   bool _savedIt = false;
   bool _busy = false;
   String? _error;
 
-  Future<void> _createWallet() async {
+  Future<void> _createWallet({bool withWords = true}) async {
     setState(() => _busy = true);
     try {
-      final w = await WalletStore.create();
+      // Words are the default now: twelve words on paper outlive a file, a phone
+      // and this app. A raw key is still offered for someone who wants to import
+      // it somewhere specific by hand.
+      final SugarWallet w;
+      if (withWords) {
+        final pw = await WalletStore.createPhrase();
+        w = pw.wallet;
+        _phrase = pw.phrase;
+      } else {
+        w = await WalletStore.create();
+        _phrase = null;
+      }
       setState(() {
         _wallet = w;
         _step = _Step.backup;
@@ -116,7 +128,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             style: TextStyle(color: kMuted, height: 1.55),
           ),
           const SizedBox(height: 18),
-          const _Bullet('Nobody else can spend it', 'The private key never leaves this phone. '
+          const _Bullet('Nobody else can spend it', 'The wallet is made here, on this phone. '
               'There is no account, no server holding your coins, and no way for anyone — '
               'including whoever built this app — to take them.'),
           const _Bullet('You will see it running', 'A notification stays on screen the whole '
@@ -129,13 +141,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             const SizedBox(height: 12),
           ],
           FilledButton(
-            onPressed: _busy ? null : _createWallet,
-            child: Text(_busy ? 'Creating your wallet…' : 'Create my wallet'),
+            onPressed: _busy ? null : () => _createWallet(),
+            child: Text(_busy ? 'Creating your wallet…' : 'Make me a wallet (12 words)'),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _busy ? null : () => _createWallet(withWords: false),
+            child: const Text('…or a raw key instead, no words'),
           ),
           const SizedBox(height: 10),
           const Text(
-            'You will be asked to save a backup before mining can start. That backup is the '
-            'only way to ever move the coins, so keep it somewhere safe.',
+            'The twelve words are the wallet. Write them on paper and they are yours '
+            'forever: they restore this same wallet in any Sugarchain or BIP-39 wallet, '
+            'with nobody\'s permission and no internet. You will be asked to save them '
+            'before mining can start — that is the only way to ever move the coins.',
             style: TextStyle(color: kMuted, fontSize: 12.5, height: 1.5),
           ),
         ],
@@ -155,6 +174,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           style: TextStyle(color: kMuted, height: 1.55),
         ),
         const SizedBox(height: 18),
+        if (_phrase != null) ...[
+          _PhraseCard(phrase: _phrase!),
+          const SizedBox(height: 16),
+        ],
         _LabeledValue(label: 'Your address', value: w.address, mono: true),
         const SizedBox(height: 10),
         _LabeledValue(label: 'Private key (WIF)', value: w.wif, mono: true),
@@ -272,4 +295,68 @@ class _LabeledValue extends StatelessWidget {
           ),
         ],
       );
+}
+
+
+/// The twelve words, numbered, with the derivation path stated underneath.
+///
+/// Numbered because a restore that goes wrong usually goes wrong on word order,
+/// and a path written down now is the difference between "this restores anywhere"
+/// and "this restores anywhere, if you also know where to look".
+class _PhraseCard extends StatelessWidget {
+  final String phrase;
+  const _PhraseCard({required this.phrase});
+
+  @override
+  Widget build(BuildContext context) {
+    final words = phrase.split(' ');
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+      decoration: BoxDecoration(
+        color: kPanel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kLine),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('YOUR 12 WORDS',
+              style: TextStyle(fontSize: 11, letterSpacing: 1.1, color: kMuted)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 14,
+            runSpacing: 6,
+            children: [
+              for (var i = 0; i < words.length; i++)
+                SizedBox(
+                  width: 150,
+                  child: Text('${i + 1}.  ${words[i]}',
+                      style: const TextStyle(
+                          fontFamily: 'monospace', fontSize: 14, height: 1.4)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: phrase));
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Words copied — write them on paper, not in a chat.')));
+              }
+            },
+            icon: const Icon(Icons.copy, size: 18),
+            label: const Text('Copy the words'),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Derivation path: $sugarBip44Path — 408 is Sugarchain\'s coin type, so these '
+            'words give this same address in any wallet that follows BIP-44.',
+            style: TextStyle(color: kMuted, fontSize: 11.5, height: 1.5),
+          ),
+        ],
+      ),
+    );
+  }
 }

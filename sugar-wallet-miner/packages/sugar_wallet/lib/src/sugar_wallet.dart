@@ -117,11 +117,19 @@ class SugarNetwork {
   final String hrp; // bech32 human-readable part
   final int wifPrefix;
   final int p2pkhPrefix;
+  final int extPubKey; // BIP-32 extended public key version
+  final int extPrvKey; // BIP-32 extended private key version
 
-  const SugarNetwork._(this.name, this.hrp, this.wifPrefix, this.p2pkhPrefix);
+  const SugarNetwork._(this.name, this.hrp, this.wifPrefix, this.p2pkhPrefix,
+      this.extPubKey, this.extPrvKey);
 
-  static const mainnet = SugarNetwork._('mainnet', 'sugar', 0x80, 0x3f);
-  static const testnet = SugarNetwork._('testnet', 'tugar', 0xef, 0x42);
+  // All from chainparams.cpp. Sugarchain keeps the *standard* BIP-32 version
+  // bytes (xpub/xprv, not a coin-specific pair), which is what makes an extended
+  // key from this app importable into other Sugarchain wallets.
+  static const mainnet =
+      SugarNetwork._('mainnet', 'sugar', 0x80, 0x3f, 0x0488B21E, 0x0488ADE4);
+  static const testnet =
+      SugarNetwork._('testnet', 'tugar', 0xef, 0x42, 0x043587CF, 0x04358394);
 
   static SugarNetwork byName(String name) =>
       name == 'testnet' ? testnet : mainnet;
@@ -158,12 +166,7 @@ class SugarWallet {
     if (k <= BigInt.zero || k >= _Curve.n) {
       throw ArgumentError('private key is out of range for secp256k1');
     }
-    final point = _mul(k, ECPoint(_Curve.gx, _Curve.gy));
-
-    final pub = Uint8List(33);
-    pub[0] = point.y.isEven ? 0x02 : 0x03;
-    pub.setRange(1, 33, bigIntBytes(point.x, 32));
-
+    final pub = compressedPubkeyOf(privateKey);
     final h160 = hash160Of(pub);
     final wifPayload = Uint8List(34)
       ..[0] = net.wifPrefix
@@ -220,6 +223,22 @@ class SugarWallet {
 
   String get privateKeyHex => toHex(privateKey);
   String get wifOrHex => wif;
+}
+
+/// The compressed public key for a 32-byte private key.
+///
+/// Exposed because BIP-32 needs it in the *middle* of deriving a child key, not
+/// only when assembling an address at the end.
+Uint8List compressedPubkeyOf(List<int> privateKey) {
+  final k = bytesToBigInt(privateKey);
+  if (k <= BigInt.zero || k >= _Curve.n) {
+    throw ArgumentError('private key is out of range for secp256k1');
+  }
+  final point = _mul(k, ECPoint(_Curve.gx, _Curve.gy));
+  final pub = Uint8List(33);
+  pub[0] = point.y.isEven ? 0x02 : 0x03;
+  pub.setRange(1, 33, bigIntBytes(point.x, 32));
+  return pub;
 }
 
 /// hash160(x) = RIPEMD160(SHA256(x)).

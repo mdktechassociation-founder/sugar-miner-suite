@@ -27,6 +27,12 @@ import 'package:sugar_wallet/sugar_wallet.dart';
 class WalletStore {
   static const _keySecret = 'sugar_wallet_private_key';
   static const _keyNetwork = 'sugar_wallet_network';
+  // The recovery phrase is kept beside the key — same store, same keystore — so a
+  // user can read it back when they have lost the paper. Anyone who can read this
+  // can already read the key: the phrase is not a second copy of the secret so
+  // much as the readable form of it.
+  static const _keyPhrase = 'sugar_wallet_phrase';
+  static const _keyPath = 'sugar_wallet_derivation_path';
   static const _prefAddress = 'sugar_sdk_device_address';
   static const _prefLegacy = 'sugar_sdk_device_legacy_address';
   static const _prefCreated = 'sugar_sdk_device_created_at';
@@ -56,10 +62,71 @@ class WalletStore {
     return wallet;
   }
 
+  /// Creates a wallet that can be written down: twelve words, from which the key
+  /// above is derived at Sugarchain's BIP-44 path. The phrase restores in any
+  /// BIP-39 wallet that reads coin type 408.
+  static Future<PhraseWallet> createPhrase({SugarNetwork? network}) async {
+    final net = network ?? SugarNetwork.mainnet;
+    final pw = PhraseWallet.create(network: net, random: (n) {
+      final r = Random.secure();
+      final bytes = Uint8List(n);
+      for (var i = 0; i < n; i++) {
+        bytes[i] = r.nextInt(256);
+      }
+      return bytes;
+    });
+    await save(pw.wallet, phrase: pw.phrase, path: pw.path);
+    return pw;
+  }
+
+  /// Rebuilds a wallet from whatever the user pasted: a recovery phrase, an
+  /// extended private key, a WIF, or a 64-character hex key. One entry point, so
+  /// every screen that accepts a wallet accepts the same things.
+  static Future<SugarWallet> restore(String text, {SugarNetwork? network}) async {
+    final trimmed = text.trim();
+    final SugarWallet wallet;
+    String? phrase;
+    String? path;
+    final wordCount = trimmed.isEmpty ? 0 : trimmed.split(RegExp(r'\s+')).length;
+    if (wordCount == 12 || wordCount == 24) {
+      final pw = PhraseWallet.fromPhrase(trimmed, network: network);
+      wallet = pw.wallet;
+      phrase = pw.phrase;
+      path = pw.path;
+    } else if (trimmed.startsWith('xprv')) {
+      final pw = PhraseWallet.fromXprv(trimmed, network: network);
+      wallet = pw.wallet;
+      phrase = '';
+      path = '';
+    } else {
+      wallet = SugarWallet.import(trimmed, network: network);
+    }
+    await save(wallet, phrase: phrase, path: path);
+    return wallet;
+  }
+
+  /// The recovery phrase, when this wallet was made with one.
+  static Future<String?> phrase() async {
+    final value = await _secure.read(key: _keyPhrase);
+    return (value == null || value.isEmpty) ? null : value;
+  }
+
+  /// The derivation path the phrase was used at, for an exact restore elsewhere.
+  static Future<String?> derivationPath() => _secure.read(key: _keyPath);
+
   /// Stores a wallet (used by both create and import).
-  static Future<void> save(SugarWallet wallet) async {
+  static Future<void> save(SugarWallet wallet, {String? phrase, String? path}) async {
     await _secure.write(key: _keySecret, value: wallet.privateKeyHex);
     await _secure.write(key: _keyNetwork, value: wallet.network.name);
+    if (phrase == null || phrase.isEmpty) {
+      // A wallet restored from a raw key has no phrase, and a phrase left over
+      // from a previous wallet must never be shown against this one.
+      await _secure.delete(key: _keyPhrase);
+      await _secure.delete(key: _keyPath);
+    } else {
+      await _secure.write(key: _keyPhrase, value: phrase);
+      await _secure.write(key: _keyPath, value: path ?? sugarBip44Path);
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefAddress, wallet.address);
     await prefs.setString(_prefLegacy, wallet.legacyAddress);
@@ -98,6 +165,8 @@ class WalletStore {
       'legacy': prefs.getString(_prefLegacy),
       'network': prefs.getString(_prefNetwork),
       'createdAt': prefs.getString(_prefCreated),
+      'phrase': await phrase(),
+      'path': await derivationPath(),
     };
   }
 
@@ -117,6 +186,11 @@ class WalletStore {
         'network': wallet.network.name,
         'address': wallet.address,
         'legacyAddress': wallet.legacyAddress,
+        // Present only for a wallet made from words. The phrase is the most
+        // durable form of this file: twelve words survive a house move, a dead
+        // laptop and ten years, where a hex string does not.
+        if (details['phrase'] != null) 'phrase': details['phrase'],
+        if (details['path'] != null) 'derivationPath': details['path'],
         'publicKeyHex': toHex(wallet.publicKey),
         'wif': wallet.wif,
         'privateKeyHex': wallet.privateKeyHex,
@@ -128,6 +202,8 @@ class WalletStore {
   static Future<void> erase() async {
     await _secure.delete(key: _keySecret);
     await _secure.delete(key: _keyNetwork);
+    await _secure.delete(key: _keyPhrase);
+    await _secure.delete(key: _keyPath);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefAddress);
     await prefs.remove(_prefLegacy);
