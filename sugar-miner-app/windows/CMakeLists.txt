@@ -73,28 +73,39 @@ set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
 
 
-# ── the mining core ───────────────────────────────────────────────────────────
-# The engine hashes in C (native/yespower), and the FFI lookup wants the library
-# beside the app. Building it here keeps a desktop build to one command; it is the
-# same source the Android build compiles per ABI.
-enable_language(C)
-set(SUGAR_NATIVE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../native/yespower")
-if(NOT EXISTS "${SUGAR_NATIVE_DIR}/yp_bridge.c")
+# ── the mining core (Windows) ─────────────────────────────────────────────────
+# The engine hashes in C. On Windows the loader wants yespower.dll beside the
+# executable, so it is built from the same sources Android and Linux compile.
+#
+# Not with MSVC. This is consensus code — the same C that produces the chain's
+# genesis hash — and it is written for a GNU-style compiler: MSVC rejects it, and
+# rewriting code that must hash identically everywhere to please one compiler is
+# the wrong trade. CI builds it with mingw's gcc instead (see
+# .github/workflows/platforms.yml) and copies the DLL in. If you build by hand,
+# do the same:
+#
+#   cd sugar-miner-sdk/native/yespower
+#   gcc -O2 -shared -o yespower.dll yp_bridge.c yespower-opt.c sha256.c -I.
+#
+if(NOT MSVC)
+  enable_language(C)
   set(SUGAR_NATIVE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../sugar-miner-sdk/native/yespower")
-endif()
-if(EXISTS "${SUGAR_NATIVE_DIR}/yp_bridge.c")
-  add_library(yespower SHARED
-    "${SUGAR_NATIVE_DIR}/yp_bridge.c"
-    "${SUGAR_NATIVE_DIR}/yespower-opt.c"
-    "${SUGAR_NATIVE_DIR}/sha256.c")
-  target_include_directories(yespower PRIVATE "${SUGAR_NATIVE_DIR}")
-  target_compile_options(yespower PRIVATE -O2)
-  set_target_properties(yespower PROPERTIES PREFIX "" OUTPUT_NAME "yespower")
-  install(TARGETS yespower RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}")
-  message(STATUS "yespower: building the mining core from ${SUGAR_NATIVE_DIR}")
+  if(NOT EXISTS "${SUGAR_NATIVE_DIR}/yp_bridge.c")
+    set(SUGAR_NATIVE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../native/yespower")
+  endif()
+  if(EXISTS "${SUGAR_NATIVE_DIR}/yp_bridge.c")
+    add_library(yespower SHARED
+      "${SUGAR_NATIVE_DIR}/yp_bridge.c"
+      "${SUGAR_NATIVE_DIR}/yespower-opt.c"
+      "${SUGAR_NATIVE_DIR}/sha256.c")
+    target_include_directories(yespower PRIVATE "${SUGAR_NATIVE_DIR}")
+    set_target_properties(yespower PROPERTIES PREFIX "" OUTPUT_NAME "yespower")
+    install(TARGETS yespower RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}")
+  endif()
 else()
-  message(WARNING "yespower: core sources not found — this build cannot mine")
+  message(STATUS "yespower: MSVC cannot compile the C core — mingw's gcc builds it (see CI)")
 endif()
+
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)

@@ -47,9 +47,23 @@ jobs:
   windows:
     name: desktop — windows
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v7
+
+      # The C core is consensus code written for a GNU-style compiler. MSVC will
+      # not compile it, and it is not going to be rewritten to suit one compiler —
+      # so Windows gets its DLL from the same gcc the Android and Linux builds use.
+      - uses: msys2/setup-msys2@v2
+        with:
+          install: mingw-w64-x86_64-gcc
+      - name: Build the mining core (mingw)
+        shell: msys2 {0}
+        run: |
+          cd sugar-miner-sdk/native/yespower
+          gcc -O2 -shared -o yespower.dll yp_bridge.c yespower-opt.c sha256.c -I.
+          ls -la yespower.dll
+
       - uses: subosito/flutter-action@v2
         with: { flutter-version: '3.47.5', channel: stable, cache: true }
 
@@ -59,7 +73,11 @@ jobs:
         run: |
           flutter pub get
           flutter build windows --release
-          find build/windows -name 'yespower.dll' | head -1
+          # the loader looks for yespower.dll beside the executable
+          OUT=$(dirname "$(find build/windows -name '*.exe' -path '*Release*' | head -1)")
+          cp ../sugar-miner-sdk/native/yespower/yespower.dll "$OUT/"
+          ls "$OUT" | grep -i yespower
+          echo "the Windows build carries the mining core"
 
       - name: Miner app (windows)
         working-directory: sugar-miner-app
