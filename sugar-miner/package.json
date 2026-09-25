@@ -1,0 +1,13 @@
+{
+  "name": "sugar-miner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sugarchain browser miner + WebSocket-to-TCP Stratum bridge",
+  "scripts": {
+    "test": "node tools/verify.js",
+    "test:live": "SUGAR_LIVE=1 node tools/verify.js",
+    "extract": "node tools/extract.js",
+    "serve": "python3 -m http.server 8080 --directory site"
+  },
+  "engines": { "node": ">=18" }
+}

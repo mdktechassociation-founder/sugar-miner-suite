@@ -1,0 +1,53 @@
+name: deploy worker
+
+# Publishes the WebSocket -> TCP Stratum bridge to Cloudflare.
+# Needs two repository secrets (Settings -> Secrets and variables -> Actions):
+#     CLOUDFLARE_API_TOKEN   (Workers Scripts: Edit)
+#     CLOUDFLARE_ACCOUNT_ID
+# If they are absent the workflow says so and skips instead of failing.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/deploy-worker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Are Cloudflare credentials configured?
+        id: check
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -n "$TOKEN" ]; then
+            echo "configured=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Skipping deploy::CLOUDFLARE_API_TOKEN is not set, so there is nothing to deploy with. Add it under Settings -> Secrets and variables -> Actions."
+          fi
+
+      - name: Syntax check
+        run: node --check worker/worker.js
+
+      - name: Deploy with wrangler
+        if: steps.check.outputs.configured == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: deploy
