@@ -1,0 +1,25 @@
+name: sugar_miner
+description: Sugarchain (SUGAR) background miner — native yespower via FFI, Stratum over TCP.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+  flutter: '>=3.19.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  ffi: ^2.1.2
+  crypto: ^3.0.3
+  # keeps Dart running in a foreground service so mining continues with the
+  # screen off / app backgrounded
+  flutter_background_service: ^5.0.10
+  shared_preferences: ^2.2.2
+  wakelock_plus: ^1.2.5
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

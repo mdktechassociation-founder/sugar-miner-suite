@@ -1,0 +1,29 @@
+# Dart / Flutter
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+**/generated_plugin_registrant.dart
+
+# Android
+android/local.properties
+android/.gradle/
+android/app/.cxx/
+.gradle/
+*.iml
+.idea/
+
+# native build output — CMake and tools/selftest.py rebuild these
+native/yespower/*.so
+native/yespower/*.o
+native/yespower/*.dylib
+
+# test harness output
+tools/live_test.log
+
+.DS_Store
+
+# python
+__pycache__/
+*.pyc
