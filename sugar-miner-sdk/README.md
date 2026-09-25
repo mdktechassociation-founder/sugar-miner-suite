@@ -43,7 +43,7 @@ dependencies:
   sugar_miner_sdk:
     git:
       url: https://github.com/mdktechassociation-founder/sugar-miner-suite.git
-      ref: sdk-v2.0.0        # pin a tag — never `main`
+      ref: sdk-v2.1.0        # pin a tag — never `main`
       path: sugar-miner-sdk           # the engine is a subfolder of the suite
 ```
 

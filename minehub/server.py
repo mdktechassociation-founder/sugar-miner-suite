@@ -49,7 +49,7 @@ SDK_GIT = 'https://github.com/mdktechassociation-founder/sugar-miner-suite.git'
 # this repository does, without their build noticing. Move this only when a tag has
 # been tested end to end: bump it, re-run test_server.py, and the wrap report names
 # the tag it used, so any APK can be traced back to an exact engine revision.
-SDK_REF = 'sdk-v2.0.0'
+SDK_REF = 'sdk-v2.1.0'
 MAX_UPLOAD = 200 * 1024 * 1024
 CACHE = {}
 

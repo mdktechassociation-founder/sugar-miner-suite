@@ -20,7 +20,7 @@ dependencies:
   #   sugar_miner_sdk:
   #     git:
   #       url: https://github.com/mdktechassociation-founder/sugar-miner-suite.git
-  #       ref: sdk-v2.0.0
+  #       ref: sdk-v2.1.0
   #       path: sugar-miner-sdk
   sugar_miner_sdk:
     path: ../sugar-miner-sdk

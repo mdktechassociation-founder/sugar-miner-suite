@@ -115,13 +115,13 @@ dependencies:
   sugar_miner_sdk:
     git:
       url: https://github.com/mdktechassociation-founder/sugar-miner-suite.git
-      ref: sdk-v2.0.0        # a tag, never `main`
+      ref: sdk-v2.1.0        # a tag, never `main`
       path: sugar-miner-sdk
 ```
 
 Inside the suite, `sugar-wallet-miner` uses a `path:` dependency instead, so the app and
 the engine it ships are always built from the same tree. Tags are prefixed per component
-(`sdk-v2.0.0`, `app-v…`, `wallet-v…`) so five components' release history stays readable
+(`sdk-v2.1.0`, `app-v…`, `wallet-v…`) so five components' release history stays readable
 in one list.
 
 ## The rule this whole suite is built around

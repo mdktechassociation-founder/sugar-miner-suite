@@ -32,7 +32,11 @@ SDK_GIT = 'https://github.com/mdktechassociation-founder/sugar-miner-suite.git'
 # `main`: a wrap produces an app somebody ships, and the engine inside it must be
 # the one this service was tested against. server.py reports the same tag from
 # /api/health, and test_server.py fails the build if the two ever drift apart.
-SDK_REF = 'sdk-v2.0.0'
+# The engine ref baked into every wrapped project. v2.1.0 is the first tag whose
+# SDK carries the platform capability layer (web refuses in words, desktop mines
+# while the window is open) and the CMake core bundling. v2.0.0 still exists and
+# still works on Android — it just predates all of that.
+SDK_REF = 'sdk-v2.1.0'
 # The engine lives in a subfolder of the suite now, so every dependency this service
 # writes carries a path as well as a ref. Pub resolves a git dependency with a path,
 # which is what keeps "pin a tag" working after the merge into one repository.
