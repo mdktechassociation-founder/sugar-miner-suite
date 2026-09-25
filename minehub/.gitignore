@@ -1,0 +1,4 @@
+
+# Compiled Python: never belongs in git, and it is regenerated on every run.
+__pycache__/
+*.pyc

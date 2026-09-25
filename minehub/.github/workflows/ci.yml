@@ -1,0 +1,137 @@
+name: minehub checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  wallet:
+    name: wallet math (vectors)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+      # Proves the address generation with published test vectors, not with
+      # values this code produced: SHA/RIPEMD standard vectors and BIP-173.
+      - run: node test_wallet.js
+
+  platform:
+    name: wrap engine + http surface
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the single-file console
+        run: python3 build.py
+      - name: Check the built page is self-contained
+        run: |
+          python3 - <<'PY'
+          import re
+          html = open('index.html', encoding='utf-8').read()
+          external = re.findall(r'(?:src|href)="(https?://[^"]+)"', html)
+          assert not external, f'index.html must not depend on the network: {external}'
+          assert 'SugarWallet' in html and 'MineHub' in html
+          print(f'index.html is self-contained ({len(html)/1024:.1f} KB)')
+          PY
+      - name: Run the end-to-end tests
+        run: python3 test_server.py
+
+  clean-mode:
+    name: clean mode really does leave the app alone
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Wrap a fixture project and diff it
+        run: python3 test_server.py
+      - name: The report must be able to prove it
+        run: |
+          python3 - <<'PY'
+          import sys, zipfile, tempfile, os, json
+          sys.path.insert(0, '.')
+          import wrapper as W
+          src = tempfile.mkdtemp()
+          proj = os.path.join(src, 'app')
+          os.makedirs(os.path.join(proj, 'lib'))
+          open(os.path.join(proj, 'pubspec.yaml'), 'w').write('name: app\ndependencies:\n  flutter:\n    sdk: flutter\n')
+          open(os.path.join(proj, 'lib', 'main.dart'), 'w').write('void main() {}\n')
+          zp = os.path.join(src, 'p.zip')
+          with zipfile.ZipFile(zp, 'w') as z:
+              z.write(os.path.join(proj, 'pubspec.yaml'), 'app/pubspec.yaml')
+              z.write(os.path.join(proj, 'lib', 'main.dart'), 'app/lib/main.dart')
+          meta = {'address': 'sugar1q' + 'x' * 38, 'app_name': 'A', 'owner_name': 'B',
+                  'terms_url': 'u', 'terms_version': 'v', 'privacy_url': 'p',
+                  'cpu_share': 25, 'daily_cap': 480, 'require_unmetered': True,
+                  'mining_notice': 'A real sentence about mining that is long enough to pass.',
+                  'notice_version': '1.0.0'}
+          r = W.wrap_zip(zp, meta, 'clean')
+          assert r['ok'], r
+          z = zipfile.ZipFile(os.path.join(W.WORK, r['id'], 'wrapped.zip'))
+          report = json.loads(z.read('app/sugar-wrap-report.json'))
+          assert report['mode'] == 'clean'
+          assert len(report['allFiles']) >= 3, report['allFiles']
+          assert all('sha256After' in c or c['change'] == 'added' for c in report['changes'])
+          m = [c for c in report['changes'] if c['file'].endswith('main.dart')]
+          assert m and m[0]['linesAdded'] == 1, f'expected exactly one import line: {m}'
+          print('clean mode verified: one import line, everything else hashed')
+          PY
+
+  no-stealth:
+    name: no stealth, no key custody, no repackaging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: The platform's three refusals must stay in the code
+        run: |
+          python3 - <<'PY'
+          import pathlib, sys
+          server = pathlib.Path('server.py').read_text(encoding='utf-8')
+          wrapper_src = pathlib.Path('wrapper.py').read_text(encoding='utf-8')
+          server = server + wrapper_src   # the wrap engine lives in wrapper.py
+          console = pathlib.Path('src/console_app.js').read_text(encoding='utf-8')
+          template = pathlib.Path('src/index.template.html').read_text(encoding='utf-8')
+          wallet = pathlib.Path('src/sugar_wallet.js').read_text(encoding='utf-8')
+
+          failures = []
+
+          # 1. a compiled apk must be refused, with the reason, in code
+          if 'compiled-apk' not in server or 're-signing' not in server:
+              failures.append('the APK refusal path is gone from server.py')
+
+          # 2. no stealth/hidden/silent switch anywhere
+          # The honesty panel is allowed to name the things it refuses ("no stealth"),
+          # so strip those explicit refusals before scanning for the real thing.
+          import re as _re
+          blob = (server + console + wallet).lower()
+          for allowed in ['no stealth', 'no hidden', 'not hidden', 'no quiet']:
+              blob = blob.replace(allowed, ' ')
+          forbidden = ['hidenotification', 'silentmode', 'nonotification',
+                       'hiddennotification', 'stealth', 'coinhive']
+          for word in forbidden:
+              if word in blob:
+                  failures.append(f'{word} appeared in the platform')
+
+          # 3. the server must never handle a private key: only 'address' is read
+          for field in ["'wif'", '"wif"', 'privateKey', 'seedPhrase', 'mnemonic']:
+              if field in server:
+                  failures.append(f'server.py touches {field}')
+
+          # 4. the wallet key is generated with a real CSPRNG, never Math.random
+          if 'getRandomValues' not in wallet:
+              failures.append('the wallet does not use crypto.getRandomValues')
+          if 'Math.random' in wallet:
+              failures.append('Math.random in key generation')
+
+          # 5. the console still says out loud what it will not do
+          if 'no stealth' not in template.lower():
+              failures.append('the honesty panel left the console')
+
+          for f in failures:
+              print(f'  x {f}')
+          if failures:
+              print('\nMineHub will not trade these away: consented mining, client-side keys,')
+              print('and no repackaging of other people\'s binaries.')
+              sys.exit(1)
+          print('all refusals intact')
+          PY
