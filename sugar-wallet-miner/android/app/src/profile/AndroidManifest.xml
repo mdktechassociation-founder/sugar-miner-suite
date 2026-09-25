@@ -1,0 +1,4 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Needed for hot reload / connect to the dev machine in these build types. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+</manifest>
