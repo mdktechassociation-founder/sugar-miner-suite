@@ -866,8 +866,9 @@ Future<String> sugarMinerRestartNote() =>
 dependencies:
   sugar_miner_sdk:
     git:
-      url: https://github.com/mdktechassociation-founder/sugar-miner-sdk.git
-      ref: main
+      url: https://github.com/mdktechassociation-founder/sugar-miner-suite.git
+      ref: sdk-v2.0.0
+      path: sugar-miner-sdk
 `;
 
     const workflow = `# .github/workflows/sugar-apk.yml — GitHub builds the wrapped APK for you

@@ -171,10 +171,23 @@ def main():
           and 'crossVectors' in read('packages/sugar_wallet/test/wallet_vectors.dart'))
 
     # ── 6. the app still builds an APK, and CI is where that happens ──────
+    #
+    # The workflow lives either in this component (a standalone checkout) or in the
+    # repository root (the suite, where one workflow per component keeps a change to
+    # the engine from silently breaking this app). Both are fine; what is not fine
+    # is this app having no CI at all, so the check reads whichever is present.
+    def ci_text():
+        for rel in ('.github/workflows/ci.yml', '.github/workflows/wallet-app.yml',
+                    os.path.join('..', '.github/workflows', 'wallet-app.yml')):
+            path = os.path.join(PKG, rel)
+            if os.path.exists(path):
+                with open(path, encoding='utf-8') as f:
+                    return f.read()
+        return ''
+
     check('CI runs the wallet vectors, the analyzer and the APK build',
-          all(k in read('.github/workflows/ci.yml')
-              for k in ['wallet_vectors.dart', 'flutter analyze', 'flutter build apk'])
-          if os.path.exists(os.path.join(PKG, '.github/workflows/ci.yml')) else False)
+          all(k in ci_text()
+              for k in ['wallet_vectors.dart', 'flutter analyze', 'flutter build apk']))
     check('no XML in this repo is malformed',
           _xml_ok())
     check('the Android identity is this app\'s own',
