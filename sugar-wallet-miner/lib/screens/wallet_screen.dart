@@ -33,6 +33,9 @@ class _WalletScreenState extends State<WalletScreen> {
   Map<String, String?> _details = const {};
   final _importController = TextEditingController();
   String? _phrase; // present when this wallet came from words
+  // Which derivation the pasted words were made at. Defaults to this app's, and
+  // only matters when the input is a phrase — see the note under the field.
+  String _importPath = sugarBip44Path;
   String? _importError;
   bool _busy = false;
 
@@ -65,6 +68,14 @@ class _WalletScreenState extends State<WalletScreen> {
     }
   }
 
+  /// Twelve or twenty-four words, which is when the path question is real.
+  bool get _looksLikePhrase {
+    final t = _importController.text.trim();
+    if (t.isEmpty) return false;
+    final n = t.split(RegExp(r'\s+')).length;
+    return n == 12 || n == 24;
+  }
+
   Future<void> _import() async {
     setState(() {
       _busy = true;
@@ -73,7 +84,8 @@ class _WalletScreenState extends State<WalletScreen> {
     try {
       // One entry point for every form of secret the user might have: 12 or 24
       // words, an xprv, a WIF, or a raw hex key.
-      final wallet = await WalletStore.restore(_importController.text);
+      final wallet =
+          await WalletStore.restore(_importController.text, path: _importPath);
       // Stop the old miner before pointing mining somewhere else: two addresses
       // submitting shares at once would be two half-answers to one question.
       await SugarMinerSdk.instance?.stop();
@@ -311,6 +323,7 @@ class _WalletScreenState extends State<WalletScreen> {
                 TextField(
                   controller: _importController,
                   obscureText: true,
+                  onChanged: (_) => setState(() {}),
                   cursorColor: kAccent,
                   decoration: InputDecoration(
                     hintText: 'words, xprv…, K…, or hex',
@@ -324,6 +337,39 @@ class _WalletScreenState extends State<WalletScreen> {
                         borderSide: const BorderSide(color: kLine)),
                   ),
                 ),
+                if (_looksLikePhrase) ...[
+                  const SizedBox(height: 12),
+                  const Text('These words were made in…',
+                      style: TextStyle(color: kMuted, fontSize: 11.5)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('this app (408)'),
+                        selected: _importPath == sugarBip44Path,
+                        onSelected: (_) =>
+                            setState(() => _importPath = sugarBip44Path),
+                      ),
+                      ChoiceChip(
+                        label: const Text('the official Android wallet (0)'),
+                        selected: _importPath == sugarOfficialMobilePath,
+                        onSelected: (_) =>
+                            setState(() => _importPath = sugarOfficialMobilePath),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _importPath == sugarBip44Path
+                        ? "Sugarchain's registered coin type is 408, so a wallet that follows "
+                            "SLIP-0044 finds the same address at this choice."
+                        : "The official Android wallet derives at Bitcoin's coin type 0. Only pick "
+                            "this if your words came from there — the same words make a different "
+                            "address at each path, and the wrong one looks like an empty wallet.",
+                    style: const TextStyle(color: kMuted, fontSize: 11.5, height: 1.5),
+                  ),
+                ],
                 if (_importError != null) ...[
                   const SizedBox(height: 8),
                   Text(_importError!, style: const TextStyle(color: kBad, fontSize: 12)),

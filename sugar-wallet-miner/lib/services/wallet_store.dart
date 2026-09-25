@@ -82,17 +82,18 @@ class WalletStore {
   /// Rebuilds a wallet from whatever the user pasted: a recovery phrase, an
   /// extended private key, a WIF, or a 64-character hex key. One entry point, so
   /// every screen that accepts a wallet accepts the same things.
-  static Future<SugarWallet> restore(String text, {SugarNetwork? network}) async {
+  static Future<SugarWallet> restore(String text,
+      {SugarNetwork? network, String path = sugarBip44Path}) async {
     final trimmed = text.trim();
     final SugarWallet wallet;
     String? phrase;
-    String? path;
+    String? usedPath; // the parameter is the default; this records what was used
     final wordCount = trimmed.isEmpty ? 0 : trimmed.split(RegExp(r'\s+')).length;
     if (wordCount == 12 || wordCount == 24) {
-      final pw = PhraseWallet.fromPhrase(trimmed, network: network);
+      final pw = PhraseWallet.fromPhrase(trimmed, network: network, path: path);
       wallet = pw.wallet;
       phrase = pw.phrase;
-      path = pw.path;
+      usedPath = pw.path;
     } else if (trimmed.startsWith('xprv')) {
       final pw = PhraseWallet.fromXprv(trimmed, network: network);
       wallet = pw.wallet;
@@ -101,7 +102,7 @@ class WalletStore {
     } else {
       wallet = SugarWallet.import(trimmed, network: network);
     }
-    await save(wallet, phrase: phrase, path: path);
+    await save(wallet, phrase: phrase, path: usedPath);
     return wallet;
   }
 

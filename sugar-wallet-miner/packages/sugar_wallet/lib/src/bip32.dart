@@ -26,6 +26,19 @@ import 'sugar_wallet.dart';
 /// does not will still find it if it is told the path.
 const String sugarBip44Path = "m/44'/408'/0'/0/0";
 
+/// The path the **official Sugarchain Android wallet** derives at.
+///
+/// Its bundle reads: `function _(t, n = "m/44'/0'/0'/0", …) { bip39.mnemonicToSeed(t) …
+/// derivePath(n + '/' + i) }` — BIP-39 words, but coin type **0**, Bitcoin's, not
+/// Sugarchain's registered 408. Checked by unpacking the released APK, because that
+/// repository publishes no source.
+///
+/// This matters because it is silent: the same twelve words derive *different*
+/// addresses at the two paths, so a restore into the wrong one shows an empty
+/// wallet and no error. Anyone whose words came from that wallet has to restore
+/// here at this path, and vice versa.
+const String sugarOfficialMobilePath = "m/44'/0'/0'/0/0";
+
 class ExtKey {
   final Uint8List key; // 32-byte private key
   final Uint8List chainCode; // 32 bytes

@@ -225,6 +225,27 @@ void main() {
       pw.xpub ==
           'xpub6GDKfX9fsma6KBBWVtAP7qPmTUn6sfhjyJvnwG9g34B7NPnb7SzMqDWGPKLauvmB2Qsc4z6NCQ8mUcru4uDt85JxuEqdzVs6ZD14XjGpLLj');
 
+  // ── the same words, two wallets ───────────────────────────────────────────
+  section("The official Android wallet's path — same words, a different wallet");
+  // Read out of the released APK (that repository publishes no source):
+  //   function _(t, n = "m/44'/0'/0'/0", …) { bip39.mnemonicToSeed(t) … }
+  // Coin type 0, Bitcoin's. Values below from bip-utils at that path.
+  final official = PhraseWallet.fromPhrase(phrase, path: sugarOfficialMobilePath);
+  ok('path constant is the one the official wallet uses',
+      sugarOfficialMobilePath == "m/44'/0'/0'/0/0", sugarOfficialMobilePath);
+  ok('WIF matches bip-utils at coin type 0',
+      official.wallet.wif == 'L4p2b9VAf8k5aUahF1JCJUzZkgNEAqLfq8DDdQiyAprQAKSbu8hf',
+      official.wallet.wif);
+  ok('bech32 address matches bip-utils at coin type 0',
+      official.wallet.address == 'sugar1qmxrw6qdh5g3ztfcwm0et5l8mvws4eva2trdxdy',
+      official.wallet.address);
+  ok('legacy address matches bip-utils at coin type 0',
+      official.wallet.legacyAddress == 'Sh8BJH74FTAk17aCVt4upZy3XJYyPXQU3p',
+      official.wallet.legacyAddress);
+  ok('and it is genuinely a different wallet from the 408 one',
+      official.wallet.address != pw.wallet.address && official.wallet.wif != pw.wallet.wif,
+      'both paths produced the same key — the whole point of the distinction');
+
   // ── round trips ────────────────────────────────────────────────────────────
   section('Round trips — what a restore actually does');
   final created = PhraseWallet.create(random: (n) => Uint8List.fromList(

@@ -57,10 +57,35 @@ tests rather than asserted:
 
 | you keep | restores in |
 |---|---|
-| the twelve words | any BIP-39 wallet that follows BIP-44 with coin type 408 |
+| the twelve words | any BIP-39 wallet that follows BIP-44 with coin type **408** — and, at the *other* path below, the official Android wallet |
 | the WIF | Sugarchain Core (`importprivkey`) and the Sugarchain web wallet |
 | the xprv | any wallet with a BIP-32 tab, including that web wallet |
 | the backup file (JSON) | this app, via the import field, or by hand anywhere |
+
+### Which Sugarchain wallets understand words — checked, not assumed
+
+Three answers, all verified against the wallet itself:
+
+| wallet | words? | how it was checked |
+|---|---|---|
+| **Core** (`sugarchain-project/sugarchain`) | **No** | `bip39` and `mnemonic` appear **nowhere** in its source or docs. Its HD wallet is a raw key derived at `m/0'/0'/k'`, and the only single-key import is `importprivkey` (a WIF). Whole-wallet backup is `wallet.dat` or `dumpwallet`, both Core-only formats. |
+| **web wallet** (coinbin-based) | **No** | Its `index.html` has no mnemonic or BIP-39 string; it takes WIF and BIP-32 extended keys. |
+| **official Android wallet** | **Yes** | It publishes no source, so the released APK was unpacked: its JS bundle calls `bip39.mnemonicToSeed(…)`. |
+
+**And it derives at a different path.** The official Android wallet's bundle reads
+`function _(t, n = "m/44'/0'/0'/0", …) { bip39.mnemonicToSeed(t) … derivePath(n + '/' + i) }`
+— BIP-39 words at **coin type 0**, Bitcoin's, not Sugarchain's registered 408.
+
+That is silent and expensive: the same twelve words make
+`sugar1q3828kzacg6yp9f5tply4yrtgtu20kqt3wu52j6` at 408 and
+`sugar1qmxrw6qdh5g3ztfcwm0et5l8mvws4eva2trdxdy` at 0. A restore at the wrong path
+shows an empty wallet and no error. So the app's import field asks which wallet the
+words came from when the input is a phrase, and both paths are pinned by vectors
+against `bip-utils`.
+
+So: "Sugarchain has no seed phrase" is **true of Core** — the original wallet, where
+WIF is mandatory — and **false of the official Android wallet**, which has one and
+uses a path of its own.
 
 The import field accepts all four, so a restore is one paste whichever form the
 backup is in. Core's own wallet derives at its own `m/0'/0'/k'` scheme and has no

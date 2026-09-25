@@ -22,7 +22,7 @@ export 'src/sugar_wallet.dart'
         compressedPubkeyOf,
         toHex,
         fromHex;
-export 'src/bip32.dart' show ExtKey, sugarBip44Path;
+export 'src/bip32.dart' show ExtKey, sugarBip44Path, sugarOfficialMobilePath;
 export 'src/bip39.dart' show Mnemonic;
 export 'src/hmac.dart' show HmacSha512, Pbkdf2;
 export 'src/phrase_wallet.dart' show PhraseWallet;
