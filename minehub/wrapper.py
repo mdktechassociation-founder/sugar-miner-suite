@@ -27,12 +27,16 @@ import time
 import uuid
 import zipfile
 
-SDK_GIT = 'https://github.com/mdktechassociation-founder/sugar-miner-sdk.git'
+SDK_GIT = 'https://github.com/mdktechassociation-founder/sugar-miner-suite.git'
 # The engine revision baked into every wrapped project. Pinned to a tag, never
 # `main`: a wrap produces an app somebody ships, and the engine inside it must be
 # the one this service was tested against. server.py reports the same tag from
 # /api/health, and test_server.py fails the build if the two ever drift apart.
-SDK_REF = 'v2.0.0'
+SDK_REF = 'sdk-v2.0.0'
+# The engine lives in a subfolder of the suite now, so every dependency this service
+# writes carries a path as well as a ref. Pub resolves a git dependency with a path,
+# which is what keeps "pin a tag" working after the merge into one repository.
+SDK_PATH = 'sugar-miner-sdk'
 WORK = os.path.join(tempfile.gettempdir(), 'minehub-work')
 
 METADATA = [
@@ -261,7 +265,8 @@ def wrap_flutter(src_dir, prefix, meta, mode='clean'):
     name_m = re.search(r'^name:\s*(\S+)', pubspec, re.M)
     project = name_m.group(1) if name_m else 'app'
 
-    dep = f'\n  sugar_miner_sdk:\n    git:\n      url: {SDK_GIT}\n      ref: {SDK_REF}\n'
+    dep = (f'\n  sugar_miner_sdk:\n    git:\n      url: {SDK_GIT}\n'
+           f'      ref: {SDK_REF}\n      path: {SDK_PATH}\n')
     if 'sugar_miner_sdk:' in pubspec:
         step('dependency', 'skipped', 'pubspec.yaml already depends on sugar_miner_sdk')
     elif re.search(r'^dependencies:\s*$', pubspec, re.M):

@@ -1,15 +1,27 @@
-name: sugar wallet checks
+name: wallet app — the user's own wallet, mining for them
 
 on:
   push:
     branches: [main]
+    paths: ['sugar-wallet-miner/**', 'sugar-miner-sdk/**', '.github/workflows/wallet-app.yml']
   pull_request:
+    paths: ['sugar-wallet-miner/**', 'sugar-miner-sdk/**', '.github/workflows/wallet-app.yml']
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wallet-app-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   wallet-vectors:
     name: wallet vectors (BIP-173 + cross-implementation)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sugar-wallet-miner
     steps:
       - uses: actions/checkout@v7
       - uses: dart-lang/setup-dart@v1
@@ -22,67 +34,61 @@ jobs:
   qr-symbol:
     name: the QR code is correct, and a real scanner reads it
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sugar-wallet-miner
     steps:
       - uses: actions/checkout@v7
-      # Flutter's own dart, not a standalone one: `tool/qr_dump.dart` imports the
-      # encoder through the app's package, and the app's package needs the Flutter
-      # SDK to resolve at all. The encoder itself is pure Dart — it only has to be
-      # *reached* through a Flutter package, and this is that toolchain.
+      # Flutter's own dart, not a standalone one: tool/qr_dump.dart reaches the
+      # encoder through the app's package, and that package needs the Flutter SDK.
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.5'
           channel: stable
           cache: true
       - run: flutter pub get
-      # The two independent implementations the encoder is checked against.
       - name: Install the reference encoder and a decoder
         run: pip install qrcode opencv-python-headless numpy
-      # Three questions per test string: does it agree with a second encoder at a
-      # pinned mask, is the version/size right, and can OpenCV read it back exactly.
-      # A QR that looks right but does not scan is the failure this catches.
       - name: Check the symbol
         run: python3 tools/check_qr.py
 
   guardrails:
     name: the wallet is the user's, the mining is visible
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sugar-wallet-miner
     steps:
       - uses: actions/checkout@v7
       - name: Check the promises this app makes on its own screens
         run: python3 tools/guardrails.py
 
   app:
-    name: analyze and build the APK
+    name: analyze, test and build the APK
     needs: [wallet-vectors, guardrails, qr-symbol]
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: sugar-wallet-miner
     steps:
       - uses: actions/checkout@v7
-
       - uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: '17'
-
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.5'
           channel: stable
           cache: true
-
       - run: flutter pub get
-
       - name: Analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
-
-      # Unit and widget tests: the price/hashrate history rules, the receive
-      # screen, and the encoder's own edge cases.
       - name: Test
         run: flutter test
-
       - name: Build the release APK
         run: flutter build apk --release
-
       - name: Confirm the SDK's mining machinery merged into the manifest
         run: |
           APK=build/app/outputs/flutter-apk/app-release.apk
@@ -98,8 +104,7 @@ jobs:
             fi
           done
           echo "the miner, its notification and its reboot receiver are in the APK"
-
       - uses: actions/upload-artifact@v7
         with:
           name: sugar-wallet-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: sugar-wallet-miner/build/app/outputs/flutter-apk/app-release.apk

@@ -1,15 +1,15 @@
-name: pages
+name: browser miner — publish the page and the bridge
 
-# Publishes site/ to GitHub Pages so the miner has a real https:// URL.
+# Publishes sugar-miner/site to GitHub Pages so the miner has a real https:// URL.
 # One-time setup: Settings -> Pages -> Build and deployment -> Source: GitHub Actions.
 
 on:
   push:
     branches: [main]
     paths:
-      - 'site/**'
-      - 'tools/**'
-      - '.github/workflows/pages.yml'
+      - 'sugar-miner/site/**'
+      - 'sugar-miner/tools/**'
+      - '.github/workflows/browser-miner-pages.yml'
   workflow_dispatch:
 
 permissions:
@@ -25,26 +25,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: sugar-miner
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
       # never publish a page that fails the consensus checks
       - name: Verify before publishing
         run: node tools/verify.js
-
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
           enablement: true
-
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: sugar-miner/site
 
   deploy:
     needs: build

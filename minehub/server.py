@@ -43,13 +43,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORK = os.path.join(tempfile.gettempdir(), 'minehub-work')
-SDK_GIT = 'https://github.com/mdktechassociation-founder/sugar-miner-sdk.git'
+SDK_GIT = 'https://github.com/mdktechassociation-founder/sugar-miner-suite.git'
 # Pinned on purpose. The wrap service bakes this SDK into other people's apps, so
 # `main` would mean the engine inside a developer's released build changes whenever
 # this repository does, without their build noticing. Move this only when a tag has
 # been tested end to end: bump it, re-run test_server.py, and the wrap report names
 # the tag it used, so any APK can be traced back to an exact engine revision.
-SDK_REF = 'v2.0.0'
+SDK_REF = 'sdk-v2.0.0'
 MAX_UPLOAD = 200 * 1024 * 1024
 CACHE = {}
 

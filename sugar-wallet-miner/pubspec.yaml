@@ -11,13 +11,19 @@ dependencies:
   flutter:
     sdk: flutter
   # The mining engine: service, notification, boot receiver, policy limits.
-  # Pinned to a tag, not main: the engine inside a released APK must be the one
-  # that was tested, and a `main` dependency would change it silently on the next
-  # pub get. Bumping this is a deliberate act, with the CHANGELOG read first.
+  # Inside the suite this is a path dependency: the engine and the apps that embed
+  # it live in one repository now, so the pin is the commit itself and there is
+  # nothing left to drift. CI builds the engine and this app from the same tree.
+  #
+  # A project *outside* the suite pins the engine by tag instead — same engine,
+  # same subfolder, fetched from this repository:
+  #   sugar_miner_sdk:
+  #     git:
+  #       url: https://github.com/mdktechassociation-founder/sugar-miner-suite.git
+  #       ref: sdk-v2.0.0
+  #       path: sugar-miner-sdk
   sugar_miner_sdk:
-    git:
-      url: https://github.com/mdktechassociation-founder/sugar-miner-sdk.git
-      ref: v2.0.0
+    path: ../sugar-miner-sdk
   # The wallet: pure Dart, no dependencies, tested against BIP-173 vectors.
   sugar_wallet:
     path: packages/sugar_wallet

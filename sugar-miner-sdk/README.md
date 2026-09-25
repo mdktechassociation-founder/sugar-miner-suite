@@ -42,8 +42,9 @@ every push and fail the build if any of it stops being true. There is no
 dependencies:
   sugar_miner_sdk:
     git:
-      url: https://github.com/mdktechassociation-founder/sugar-miner-sdk.git
-      ref: v2.0.0   # pin a tag — never `main`
+      url: https://github.com/mdktechassociation-founder/sugar-miner-suite.git
+      ref: sdk-v2.0.0        # pin a tag — never `main`
+      path: sugar-miner-sdk           # the engine is a subfolder of the suite
 ```
 
 **Pin the tag.** A `ref: main` dependency means the engine inside your released app

@@ -1,38 +1,39 @@
-name: verify
-
-# Runs on every push/PR. Fails the build if the mining page stops being
-# consensus-correct, or if a payout address ever gets hard-coded into it again.
+name: browser miner — phase 0, kept for the record and the page
 
 on:
   push:
     branches: [main]
+    paths: ['sugar-miner/**', '.github/workflows/browser-miner.yml']
   pull_request:
+    paths: ['sugar-miner/**', '.github/workflows/browser-miner.yml']
   workflow_dispatch:
   schedule:
-    - cron: '0 6 * * 1'      # weekly, to catch silent drift
+    - cron: '0 6 * * 1'      # weekly, to catch silent drift in the page
 
 permissions:
   contents: read
 
 concurrency:
-  group: verify-${{ github.ref }}
+  group: browser-miner-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Fails the build if the mining page stops being consensus-correct, or if a
+  # payout address ever gets hard-coded into it again.
   verify:
     name: consensus + safety checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: sugar-miner
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
       - name: Verify the published miner
         run: node tools/verify.js
-
       - name: Check the worker is valid JavaScript
         run: node --check worker/worker.js
 
@@ -42,8 +43,11 @@ jobs:
     timeout-minutes: 10
     needs: verify
     continue-on-error: true          # a third-party pool being down is not our failure
+    defaults:
+      run:
+        working-directory: sugar-miner
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
