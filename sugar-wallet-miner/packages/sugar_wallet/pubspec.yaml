@@ -2,7 +2,7 @@ name: sugar_wallet
 description: Sugarchain wallet generation in pure Dart — bech32 addresses, WIF, base58check. No dependencies, no native code, no network.
 version: 1.0.0
 publish_to: 'none'
-repository: https://github.com/mdktechassociation-founder/sugar-wallet-miner
+repository: https://github.com/mdktechassociation-founder/sugar-miner-suite
 
 environment:
   sdk: '>=3.4.0 <4.0.0'

@@ -2,7 +2,7 @@ name: sugar_wallet_miner
 description: Every user gets their own Sugarchain wallet, and their phone mines SUGAR into it. Consented, always-visible, self-custody mining built on sugar-miner-sdk.
 publish_to: 'none'
 version: 1.0.0+1
-repository: https://github.com/mdktechassociation-founder/sugar-wallet-miner
+repository: https://github.com/mdktechassociation-founder/sugar-miner-suite
 
 environment:
   sdk: '>=3.8.0 <4.0.0'

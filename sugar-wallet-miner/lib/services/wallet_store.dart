@@ -112,7 +112,7 @@ class WalletStore {
         'note': 'SUGAR Wallet backup. Anyone holding privateKeyHex or wif can spend '
             'this wallet. Keep it offline. There is no recovery service and no '
             'password reset — if this file is lost, the SUGAR is unreachable forever.',
-        'app': 'SUGAR Wallet (mdktechassociation-founder/sugar-wallet-miner)',
+        'app': 'SUGAR Wallet (sugar-miner-suite/sugar-wallet-miner)',
         'createdAt': details['createdAt'],
         'network': wallet.network.name,
         'address': wallet.address,

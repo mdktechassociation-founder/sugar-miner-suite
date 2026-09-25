@@ -11,8 +11,8 @@ import 'package:sugar_miner_sdk/sugar_miner_sdk.dart';
 class AppConfig {
   /// Shown in the consent screen and in the notification.
   static const appName = 'SUGAR Wallet';
-  static const termsUrl = 'https://github.com/mdktechassociation-founder/sugar-wallet-miner/blob/main/TERMS.md';
-  static const privacyUrl = 'https://github.com/mdktechassociation-founder/sugar-wallet-miner/blob/main/PRIVACY.md';
+  static const termsUrl = 'https://github.com/mdktechassociation-founder/sugar-miner-suite/blob/main/sugar-wallet-miner/TERMS.md';
+  static const privacyUrl = 'https://github.com/mdktechassociation-founder/sugar-miner-suite/blob/main/sugar-wallet-miner/PRIVACY.md';
   static const termsVersion = '2026-09-24';
 
   /// The user is the beneficiary, so their own wallet is the payout address.

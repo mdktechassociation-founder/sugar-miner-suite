@@ -8,7 +8,7 @@ Browser page kaadu, idi real native app.
 
 ## Step 1 — APK download (Flutter install avasaram ledu)
 
-1. Repo open cheyyu: `https://github.com/mdktechassociation-founder/sugar-miner-app`
+1. Repo open cheyyu: `https://github.com/mdktechassociation-founder/sugar-miner-suite`
 2. **Actions** tab → **build apk** workflow → latest green run open cheyyu
 3. Page bottom lo **Artifacts** section → download cheyyu:
    - `sugar-miner-apk-universal` — andari phones ki pani chestundi (safe choice)
@@ -71,7 +71,7 @@ Aa notification ne mining ni bathikistundi.
 ## Repo nunchi nee inta build cheyyali anukunte
 
 ```bash
-git clone https://github.com/mdktechassociation-founder/sugar-miner-app
+git clone https://github.com/mdktechassociation-founder/sugar-miner-suite   # then: cd sugar-miner-suite/sugar-miner-app
 cd sugar-miner-app
 python3 tools/selftest.py        # C core correct aa leda check (genesis PoW hash)
 flutter pub get

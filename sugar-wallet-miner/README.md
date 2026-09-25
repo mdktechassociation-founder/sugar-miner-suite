@@ -4,7 +4,7 @@ An Android app where **every user gets their own Sugarchain wallet**, created on
 their own device, and their phone mines SUGAR **into that wallet**. Not into the
 developer's. The user keeps the coins; the app keeps none.
 
-It is a Flutter app built on [`sugar-miner-sdk`](https://github.com/mdktechassociation-founder/sugar-miner-sdk),
+It is a Flutter app built on [`sugar-miner-sdk`](https://github.com/mdktechassociation-founder/sugar-miner-suite/tree/main/sugar-miner-sdk),
 which supplies the mining engine, the foreground service, the always-visible
 notification and the reboot receiver.
 
