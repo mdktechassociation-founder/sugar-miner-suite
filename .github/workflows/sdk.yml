@@ -70,7 +70,6 @@ jobs:
   # Cross-compiles for every ABI the plugin ships, so a broken toolchain or a
   # missing source file is caught before a full APK build.
   cross-compile:
-    name: native core (cross)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
