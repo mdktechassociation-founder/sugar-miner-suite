@@ -106,8 +106,20 @@ function loadJsOnlyEngine() {
   const wallets = (page.match(/sugar1[0-9a-z]{30,}/gi) || []);
   ok('no wallet address hard-coded anywhere in the page', wallets.length === 0,
      wallets.length ? wallets.join(', ') : '');
-  ok('pool/proxy field ships EMPTY', !!urlBox && /value=""/.test(urlBox[0]),
+  // The bridge is this project's own worker, and it may be pre-filled: the page
+  // this repository publishes is the one that worker exists for, and making every
+  // visitor paste it was friction with no safety value. What must NOT happen is a
+  // *third party's* relay being baked in — someone's mining would then flow through
+  // a server this project does not control. So the rule is: the field ships empty,
+  // or it names this project's own bridge.
+  const OUR_BRIDGE = 'wss://stratum-proxy.mdktechassociation.workers.dev';
+  const urlValue = urlBox ? (/value="([^"]*)"/.exec(urlBox[0]) || [null, ''])[1] : null;
+  ok('bridge field is empty, or this project\'s own bridge',
+     !!urlBox && (urlValue === '' || urlValue === OUR_BRIDGE),
      urlBox ? urlBox[0].trim() : '');
+  ok('the bridge can still be overridden with ?ws=',
+     page.includes('ws=([^&]+)'),
+     'a page that only connects to one relay is a page you cannot move');
   ok('all three engines are still inlined',
      ['WASM_SIMD_B64', 'WASM_PORTABLE_B64', 'JS_ONLY_MEM_B64', 'createYespowerJSOnly'].every(k => page.includes(k)));
 
