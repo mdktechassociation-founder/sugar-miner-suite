@@ -1,0 +1,56 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Merged into the host app: the app does not have to declare any of this. -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- mining in the background is the whole point of this library -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Android 14+ foreground services must declare a type. specialUse is used
+         instead of dataSync because Android 15 caps dataSync at 6 hours a day,
+         which would silently switch mining off overnight. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Permission 2, as users experience it: the system dialog that lets this
+         app keep running without battery optimisation. Without it Android
+         freezes background work after a while, which is the difference between
+         "mines while the app is open" and "mines continuously".
+         (Play policy only allows this permission for apps whose core function
+         needs it — mining is not one of the listed cases, so Play distribution
+         is out either way.) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- The user's mining choice is remembered, so it can be honoured again
+         after a restart. SugarBootReceiver does nothing unless the user agreed
+         AND has not stopped mining AND the notification is allowed. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application>
+        <service
+            android:name="com.mdk.sugarminer.sdk.SugarMiningService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Consented CPU mining (yespowerSUGAR) for this app's developer, run only with the device owner's permission and always shown in a notification." />
+        </service>
+
+        <!-- Resume after a reboot or an app update, but only for a user who
+             agreed and has not said stop. Not exported, and note the absence of
+             directBootAware: at locked-boot time the user's consent is
+             unreadable, and mining without reading it is exactly what this SDK
+             refuses to do. -->
+        <receiver
+            android:name="com.mdk.sugarminer.sdk.SugarBootReceiver"
+            android:exported="false"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

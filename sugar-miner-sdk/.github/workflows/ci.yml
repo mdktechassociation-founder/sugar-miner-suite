@@ -1,0 +1,122 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The promise in the README, enforced by a test.
+  guardrails:
+    name: consented-and-visible guardrails
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Every code path must be consented, visible and limited
+        run: python3 tools/guardrails.py
+
+  # The hashing core must reproduce the coin's genesis proof-of-work hash.
+  native-core:
+    name: native core self-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the C library and check the SugarChain genesis hash
+        run: python3 tools/selftest.py
+
+      # The plugin's real CMakeLists (the one the APK uses) must configure and
+      # build on the host too — a wrong source path fails here in seconds
+      # instead of after a four minute Android build.
+      - name: Configure and build the plugin's CMake project
+        run: |
+          cmake -S android/src/main/cpp -B /tmp/cmake-check -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/cmake-check
+          nm -D /tmp/cmake-check/libyespower.so | grep -E 'yp_hash|yp_scan|yp_version|yp_free_local'
+
+  # Proof that an ordinary app can integrate this in a few lines.
+  # The engine's own promise, tested rather than reviewed: rig mode splits the
+  # consented budget and can never enlarge it.
+  engine-tests:
+    name: engine unit tests (the budget stays a ceiling)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Every core plan, every device state
+        run: flutter test
+
+  example-apk:
+    name: build the example app
+    runs-on: ubuntu-latest
+    needs: [guardrails, native-core, engine-tests]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Versions
+        run: flutter --version
+
+      - name: Resolve dependencies (plugin + example)
+        run: |
+          cd example
+          flutter pub get
+
+      # fatal on purpose: a Dart error here costs 30 seconds, the same error
+      # discovered during the APK build costs five minutes
+      - name: Analyze the SDK and the example
+        run: |
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          cd example && flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Build the example APK
+        run: |
+          cd example
+          flutter build apk --release
+
+      - name: Confirm the restart machinery shipped inside the APK
+        run: |
+          APK=example/build/app/outputs/flutter-apk/app-release.apk
+          unzip -o -q "$APK" AndroidManifest.xml -d /tmp/manifestcheck
+          echo "--- boot / re-arm pieces in the merged manifest ---"
+          strings -e l /tmp/manifestcheck/AndroidManifest.xml \
+            | grep -E 'RECEIVE_BOOT_COMPLETED|SugarBootReceiver|BOOT_COMPLETED|SugarMiningService|PROPERTY_SPECIAL_USE' | sort -u
+          strings -e l /tmp/manifestcheck/AndroidManifest.xml | grep -q 'SugarBootReceiver'
+          strings -e l /tmp/manifestcheck/AndroidManifest.xml | grep -q 'RECEIVE_BOOT_COMPLETED'
+
+      - name: Confirm the hashing library actually shipped inside the APK
+        run: |
+          APK=example/build/app/outputs/flutter-apk/app-release.apk
+          ls -la "$APK"
+          unzip -l "$APK" | grep -E 'libyespower\.so'
+          unzip -o -q "$APK" 'lib/arm64-v8a/libyespower.so' -d /tmp/apkcheck
+          readelf --dyn-syms /tmp/apkcheck/lib/arm64-v8a/libyespower.so | grep -E 'yp_hash|yp_scan|yp_version'
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sugar-miner-sdk-example-apk
+          path: example/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
