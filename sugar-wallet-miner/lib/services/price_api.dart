@@ -15,9 +15,9 @@
 library;
 
 import 'dart:convert';
-import 'dart:io';
 
 import 'history.dart';
+import 'net.dart';
 
 class SugarPrice {
   final double usd;
@@ -59,15 +59,8 @@ class PriceApi {
     if (!force && cached != null && now.difference(_cachedAt) < _cacheFor) {
       return cached;
     }
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 12);
     try {
-      final request = await client.getUrl(Uri.parse(_url));
-      request.headers.set(HttpHeaders.userAgentHeader, 'sugar-wallet/1.0');
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
-      if (response.statusCode != 200) {
-        throw HttpException('HTTP ${response.statusCode}', uri: Uri.parse(_url));
-      }
+      final body = await httpGet(_url, timeout: const Duration(seconds: 12));
       final json = jsonDecode(body) as Map<String, dynamic>;
       final sugar = (json['sugarchain'] as Map?) ?? const {};
       final usd = (sugar['usd'] as num?)?.toDouble() ?? 0;
@@ -86,8 +79,6 @@ class PriceApi {
         return SugarPrice(usd: cached.usd, fetchedAt: cached.fetchedAt, error: '$e');
       }
       return SugarPrice(usd: 0, fetchedAt: now, error: '$e');
-    } finally {
-      client.close(force: true);
     }
   }
 }

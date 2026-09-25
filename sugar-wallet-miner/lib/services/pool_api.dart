@@ -7,7 +7,8 @@
 library;
 
 import 'dart:convert';
-import 'dart:io';
+
+import 'net.dart';
 
 import '../app_config.dart';
 
@@ -115,15 +116,14 @@ class PoolApi {
   /// Fetches what the pool knows about [address]. Never throws: a network
   /// problem is an `error` field on an otherwise empty account.
   static Future<PoolAccount> fetch(String address, {Duration timeout = const Duration(seconds: 15)}) async {
-    final client = HttpClient()..connectionTimeout = timeout;
     try {
-      final stats = await _get(client, '${PoolInfo.statsUrl}$address', timeout);
+      final stats = await httpGet('${PoolInfo.statsUrl}$address', timeout: timeout);
       final account = PoolAccount.fromJson(
         jsonDecode(stats) as Map<String, dynamic>,
       );
       // the network hashrate lives in the pool-wide stats, not the per-miner one
       try {
-        final pool = jsonDecode(await _get(client, PoolInfo.poolStatsUrl, timeout)) as Map<String, dynamic>;
+        final pool = jsonDecode(await httpGet(PoolInfo.poolStatsUrl, timeout: timeout)) as Map<String, dynamic>;
         final algo = ((pool['algos'] as Map?)?['yespowerSUGAR'] as Map?) ?? const {};
         final network = (algo['networkSols'] as num?)?.toDouble();
         if (network != null && network > 0) {
@@ -145,20 +145,7 @@ class PoolApi {
       return account;
     } catch (e) {
       return PoolAccount(address: address, fetchedAt: DateTime.now(), error: '$e');
-    } finally {
-      client.close(force: true);
     }
-  }
-
-  static Future<String> _get(HttpClient client, String url, Duration timeout) async {
-    final request = await client.getUrl(Uri.parse(url)).timeout(timeout);
-    request.headers.set(HttpHeaders.userAgentHeader, 'sugar-wallet/1.0');
-    final response = await request.close().timeout(timeout);
-    final body = await response.transform(utf8.decoder).join().timeout(timeout);
-    if (response.statusCode != 200) {
-      throw HttpException('HTTP ${response.statusCode}', uri: Uri.parse(url));
-    }
-    return body;
   }
 }
 

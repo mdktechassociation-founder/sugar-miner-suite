@@ -32,6 +32,7 @@ import 'src/consent.dart';
 import 'src/headless.dart' as headless;
 import 'src/miner/engine.dart';
 import 'src/core_plan.dart';
+import 'src/platform/host.dart';
 import 'src/miner_isolate.dart';
 import 'src/miner_api.dart';
 import 'src/notification_style.dart';
@@ -152,6 +153,15 @@ class SugarMiner implements SugarMinerApi {
   @override
   Future<MinerStartResult> start({bool byUser = false}) async {
     if (_isolates.isNotEmpty) return const MinerStartResult(true, 'already running');
+
+    // ---- the platform gate -------------------------------------------------
+    // A browser cannot load the native library this engine hashes with, so a web
+    // build must not pretend to start. One clear sentence, and the host app can
+    // show Host.supportNote for the full reason.
+    if (!Host.canMine) {
+      _note('refused to start: this platform cannot hash (${Host.label})');
+      return MinerStartResult(false, 'mining is not supported on ${Host.label}');
+    }
 
     if (!config.isValid) {
       return const MinerStartResult(
@@ -417,6 +427,7 @@ class SugarMiner implements SugarMinerApi {
     final body = config.notification.body(values);
 
     if (_isolates.isEmpty) {
+      if (!Host.hasSystemNotification) return; // desktop/web: no service, no notification
       await ServiceBridge.startForeground(
         title: title,
         text: body,

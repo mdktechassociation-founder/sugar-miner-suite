@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'platform/host.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -20,7 +20,7 @@ class DeviceHealth {
 
   static DeviceHealth of(DeviceState raw) => DeviceHealth(
         raw: raw,
-        cpuCores: Platform.numberOfProcessors,
+        cpuCores: Host.cpuCores,
         ramMb: _ramMb(),
         batteryTempC: _batteryTempFrom(raw),
       );
@@ -29,17 +29,10 @@ class DeviceHealth {
   bool get isLowEnd => cpuCores <= 4 || ramMb < 2048;
 
   static int _ramMb() {
-    try {
-      // /proc/meminfo is readable on Android without any permission
-      final line = File('/proc/meminfo').readAsLinesSync().firstWhere(
-            (l) => l.startsWith('MemTotal:'),
-            orElse: () => '',
-          );
-      final kb = int.tryParse(RegExp(r'\d+').firstMatch(line)?.group(0) ?? '') ?? 0;
-      return kb ~/ 1024;
-    } catch (_) {
-      return 2048;
-    }
+    // /proc/meminfo where it exists (Android, Linux); -1 elsewhere. Read through
+    // Host so this file compiles for the web, which has no filesystem.
+    final mb = Host.ramMb;
+    return mb > 0 ? mb : 2048;
   }
 
   static int _batteryTempFrom(DeviceState s) {
@@ -255,7 +248,7 @@ class WorkerIdentity {
     // <app>-<android|ios>-<4 hex>, e.g. myapp-android-7f3a
     final slug = appSlug.isEmpty ? 'app' : appSlug.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
     final tail = DateTime.now().millisecondsSinceEpoch.toRadixString(16);
-    final name = '$slug-${Platform.isAndroid ? 'android' : 'device'}-${tail.substring(tail.length - 4)}';
+    final name = '$slug-${Host.isAndroid ? 'android' : 'device'}-${tail.substring(tail.length - 4)}';
     await p.setString(_keyWorker, name);
     return name;
   }

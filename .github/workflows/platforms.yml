@@ -1,0 +1,143 @@
+name: every platform this suite claims
+
+# The three apps are Flutter, so "supported" has to mean "builds", and only the
+# platform's own machine can answer that. These jobs are the answer: Linux, Windows
+# and macOS desktops, the web, and an unsigned iOS build. A platform that stops
+# building here is a platform this repository no longer supports, and nobody has to
+# find out from a user.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: desktop — linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      # The desktop toolchain, plus the two libraries the Linux wallet needs for
+      # its keystore. This list is the whole cost of Linux support.
+      - name: Desktop build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libsecret-1-dev libjsoncpp-dev
+      - uses: subosito/flutter-action@v2
+        with: { flutter-version: '3.47.5', channel: stable, cache: true }
+
+      - name: Wallet app (linux)
+        working-directory: sugar-wallet-miner
+        run: |
+          flutter pub get
+          flutter build linux --release
+          test -f build/linux/x64/release/bundle/lib/libyespower.so
+          echo "the desktop bundle carries the mining core"
+
+      - name: Miner app (linux)
+        working-directory: sugar-miner-app
+        run: |
+          flutter pub get
+          flutter build linux --release
+          test -f build/linux/x64/release/bundle/lib/libyespower.so
+
+  windows:
+    name: desktop — windows
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with: { flutter-version: '3.47.5', channel: stable, cache: true }
+
+      - name: Wallet app (windows)
+        working-directory: sugar-wallet-miner
+        shell: bash
+        run: |
+          flutter pub get
+          flutter build windows --release
+          find build/windows -name 'yespower.dll' | head -1
+
+      - name: Miner app (windows)
+        working-directory: sugar-miner-app
+        shell: bash
+        run: |
+          flutter pub get
+          flutter build windows --release
+
+  macos:
+    name: desktop — macos
+    runs-on: macos-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with: { flutter-version: '3.47.5', channel: stable, cache: true }
+
+      - name: Wallet app (macos)
+        working-directory: sugar-wallet-miner
+        run: |
+          flutter pub get
+          flutter build macos --release
+
+      - name: Miner app (macos)
+        working-directory: sugar-miner-app
+        run: |
+          flutter pub get
+          flutter build macos --release
+
+  web:
+    name: web — the wallet only, and it says so
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with: { flutter-version: '3.47.5', channel: stable, cache: true }
+
+      - name: The wallet builds for the browser
+        working-directory: sugar-wallet-miner
+        run: |
+          flutter pub get
+          flutter build web --release
+          test -f build/web/index.html
+
+      # A browser cannot open a TCP socket to a pool, so a web build that quietly
+      # shipped a miner would be a web build that lies. The engine's web twins
+      # refuse by construction; this proves the Dart never reaches for the native
+      # library on that target.
+      - name: The web build has no native hashing path
+        working-directory: sugar-wallet-miner
+        run: |
+          python3 - <<'PY'
+          import pathlib, sys
+          sdk = pathlib.Path('../sugar-miner-sdk/lib/src/miner')
+          stub = (sdk / 'yespower_unsupported.dart').read_text()
+          if 'UnsupportedError' not in stub:
+              sys.exit('the web twin for yespower no longer refuses')
+          print('web: the engine refuses to hash, in words')
+          PY
+
+  ios:
+    name: ios — builds unsigned, and mining is foreground-only
+    runs-on: macos-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with: { flutter-version: '3.47.5', channel: stable, cache: true }
+
+      - name: Wallet app (ios, unsigned)
+        working-directory: sugar-wallet-miner
+        run: |
+          flutter pub get
+          flutter build ios --release --no-codesign
+
+      - name: Miner app (ios, unsigned)
+        working-directory: sugar-miner-app
+        run: |
+          flutter pub get
+          flutter build ios --release --no-codesign

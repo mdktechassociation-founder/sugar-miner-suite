@@ -1,17 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-import 'background_service.dart';
+import 'miner_host.dart';
 import 'miner/engine.dart';
 import 'miner/yespower.dart';
 import 'settings.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await configureBackgroundService();
   runApp(const SugarMinerApp());
 }
 
@@ -43,7 +41,7 @@ class _HomePageState extends State<HomePage> {
   final _host = TextEditingController(text: 'stratum.poolab.org');
   final _port = TextEditingController(text: '8451');
 
-  final _service = FlutterBackgroundService();
+  final _miner = MinerHost.forThisPlatform();
   final _log = <String>[];
   final _subs = <StreamSubscription>[];
 
@@ -101,19 +99,19 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _bindService() {
-    _subs.add(_service.on('stats').listen((e) {
-      if (!mounted || e == null) return;
+    // The host already drops empty payloads, so there is nothing to null-check
+    // here; the events that arrive are the ones with something in them.
+    _subs.add(_miner.on('stats').listen((e) {
+      if (!mounted) return;
       setState(() => _stats = MinerSnapshot.fromJson(Map<String, dynamic>.from(e)));
     }));
-    _subs.add(_service.on('log').listen((e) {
-      if (e == null) return;
+    _subs.add(_miner.on('log').listen((e) {
       _append((e['message'] ?? e).toString());
     }));
-    _subs.add(_service.on('share').listen((e) {
-      if (e == null) return;
+    _subs.add(_miner.on('share').listen((e) {
       _append(e['accepted'] == true ? 'share accepted ✓' : 'share rejected: ${e['error']}');
     }));
-    _service.isRunning().then((v) {
+    _miner.isRunning().then((v) {
       if (mounted) setState(() => _running = v);
     });
   }
@@ -145,18 +143,20 @@ class _HomePageState extends State<HomePage> {
 
     // keep the CPU awake while plugged in and mining
     await WakelockPlus.enable();
-    await _service.startService();
+    await _miner.start();
     if (mounted) setState(() => _running = true);
     _append('miner starting — a notification will stay up while it runs');
   }
 
   Future<void> _stop() async {
-    _service.invoke('stop');
+    _miner.invoke('stop');
     await WakelockPlus.disable();
-    if (mounted) setState(() {
-      _running = false;
-      _stats = const MinerSnapshot();
-    });
+    if (mounted) {
+      setState(() {
+        _running = false;
+        _stats = const MinerSnapshot();
+      });
+    }
     _append('stopped');
   }
 

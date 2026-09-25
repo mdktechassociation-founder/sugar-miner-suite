@@ -16,6 +16,31 @@ still contains the full history of every component, imported intact.
 | [`sugar-wallet-miner/`](sugar-wallet-miner/) | 3 — the user's app | creates a wallet on the phone, then mines into it. The beneficiary is the phone's own user | end users |
 | [`minehub/`](minehub/) | 4 — the platform | wallet creation in a browser, the project-wrap service, the earnings/fleet console, deployment files | developers, operators |
 
+## Which platforms, and what each one can actually do
+
+Flutter runs in more places than this engine can hash, and the difference is worth
+stating plainly rather than discovering after an install.
+
+| platform | wallet app | miner app | SDK | what is different |
+|---|---|---|---|---|
+| **Android** | ✅ | ✅ | ✅ | the full engine: foreground service, notification that stays visible, battery/thermal pausing, boot resume |
+| **Linux** | ✅ | ✅ | ✅ | mining runs while the window is open. The native core is built by the same CMake that builds the app, so the library is always beside it. Needs `libsecret-1-dev` and `libjsoncpp-dev` for the wallet's keystore |
+| **Windows** | ✅ | ✅ | ✅ | same as Linux, with `yespower.dll` next to the executable |
+| **macOS** | ✅ | ✅ | ✅ | same as Linux; sandbox entitlements apply to a distributed build |
+| **iOS** | ✅ wallet | ⚠️ foreground only | ✅ | iOS **suspends background apps** and has no foreground service. Mining happens only while the app is on screen, the UI says so, and no notification changes that |
+| **Web** | ✅ wallet | ❌ not offered | ✅ compiles | a browser cannot open a TCP socket to a pool and cannot load the native core. The web build runs the wallet and refuses to mine, in one plain sentence. The browser miner in `sugar-miner/` is the web answer, and it uses a WebSocket bridge for exactly this reason |
+
+Three things the engine does on every platform, unchanged: the consented CPU share is
+never exceeded, the daily minute cap still applies, and stopping is final.
+
+On desktop there is **no notification** — desktop Flutter has no equivalent this app
+ships — so the app window is the indicator, and closing it stops mining. That is a real
+difference from Android, where mining survives the app being closed, and it is written
+on the screen rather than left to be discovered.
+
+CI builds all of these on their own machines (`.github/workflows/platforms.yml`), so
+"supported" means "it built", not "it should".
+
 ## How the phases fit together
 
 ```
