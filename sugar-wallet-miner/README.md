@@ -16,10 +16,13 @@ lib/
   screens/onboarding.dart      create wallet → save backup → consent
   screens/home.dart            earnings, live status, start/stop
   screens/wallet_screen.dart   show, back up, import, erase
+  screens/send.dart            spend: destination, amount, fee, sign, broadcast
+  screens/receive.dart         one QR code and the address as text
   services/wallet_store.dart   keystore for the key, preferences for the address
   services/pool_api.dart       reads the pool's public API — nothing is reported
-packages/sugar_wallet/         pure-Dart wallet generation (no dependencies)
-tools/guardrails.py            28 checks on the promises this app makes
+  services/chain_api.dart      the chain: unspent, fee estimate, broadcast
+packages/sugar_wallet/         pure-Dart wallet generation and spending
+tools/guardrails.py            33 checks on the promises this app makes
 ```
 
 ## What makes this app different from a developer-hosted miner
@@ -33,8 +36,10 @@ tools/guardrails.py            28 checks on the promises this app makes
 
 ## How the wallet works
 
-`packages/sugar_wallet` generates the wallet in pure Dart: SHA-256, RIPEMD-160,
-secp256k1, bech32 (BIP-173) and base58check, with no package dependencies at all.
+`packages/sugar_wallet` generates the wallet, and spends from it, in pure Dart:
+SHA-256, RIPEMD-160, secp256k1 (including ECDSA and RFC 6979 deterministic nonces),
+bech32 (BIP-173), base58check and BIP-143 transaction signing, with no package
+dependencies at all.
 The parameters are Sugarchain's own, read from its `src/chainparams.cpp`:
 
 | | |
@@ -54,10 +59,49 @@ yet, so the app writes the *public address* to ordinary preferences as well. An
 address is public information; a private key is not. Mining refers to the former
 only — the SDK is handed an address and nothing else, ever.
 
+### Sending — both kinds of coin
+
+A Sugarchain address comes in two forms and a wallet has to handle both:
+
+| | `sugar1q…` (P2WPKH, native segwit) | `S…` (P2PKH, legacy) |
+|---|---|---|
+| where it comes from | this app, the mining SDK, the official Android wallet | Core's `importprivkey`, the web wallet, anybody who pays the old address |
+| how big a coin is to spend | 68 vB | 148 vB — more than twice |
+| how it is signed | BIP-143 (commits to the amount) | the pre-segwit rule, in the scriptSig |
+
+Both are supported end to end: the wallet derives both addresses from the same key,
+receives at either, and spends from either. The coin's script decides how it is
+signed, not a preference — signing a legacy coin with BIP-143 produces a signature
+no node will accept, and signing a segwit coin the old way is worse. So the app asks
+the chain what each unspent output's script actually is and signs accordingly, and
+an output that belongs to neither of this wallet's scripts is refused rather than
+signed.
+
+The other half of "usable anywhere" is the key itself. The WIF this app shows is a
+standard compressed-key Sugarchain WIF (prefix `0x80`): paste it into Core's
+`importprivkey` or into the web wallet and it is the same wallet, at the same
+addresses, with the same coins — and those two tools can spend them, which is why
+the legacy half above exists.
+
+Sending is done on the device and nowhere else. The screen asks the chain two
+questions — what this address can spend, and what the chain charges per virtual
+byte today — builds the transaction, shows the amount, the fee, the change and the
+total on one card, and only then signs. The signature is BIP-143 P2WPKH, made with
+deterministic RFC 6979 nonces so the same transaction signs to the same bytes every
+time. What leaves the phone is the signed transaction and nothing else: no key, no
+phrase, no account. The only write this app performs is `POST /esplora/tx` on the
+chain's own API.
+
+Dust is handled explicitly: below 546 satoshis an output costs more to spend than
+it is worth, so the remainder goes into the fee instead of being left as an
+unspendable coin.
+
 ### Verified, not assumed
 
 ```
 dart run packages/sugar_wallet/test/wallet_vectors.dart   →  36 passed, 0 failed
+dart run packages/sugar_wallet/test/hd_vectors.dart       →  61 passed, 0 failed
+dart run packages/sugar_wallet/test/spend_vectors.dart    →  19 passed, 0 failed
 ```
 
 The vectors are published ones, not this code's own output: the SHA-256 and
@@ -66,6 +110,14 @@ RIPEMD-160 standard test vectors (including the million-byte cases), the
 stronger statement than one implementation being self-consistent — the same
 private keys run through the JavaScript wallet in the MineHub console, asserting
 byte-identical addresses and WIFs.
+
+The spend vectors are the same idea applied to signing: **BIP-143's own published
+native-P2WPKH transaction** is rebuilt from scratch and must produce its published
+sighash and its published signature, byte for byte — which is only possible if the
+ECDSA nonce is derived the way RFC 6979 says, because the published signature used
+a deterministic one. Then a Sugarchain spend is compared against an independent
+implementation (Python's `embit`): same sighash, same signature bytes, same raw
+transaction, same txid.
 
 ## What it costs the user
 
@@ -93,7 +145,7 @@ foreground-service reason — so "the miner really shipped" is a test result rat
 than a hope.
 
 ```bash
-python3 tools/guardrails.py    # 28 checks: the wallet is the user's, nothing phones home
+python3 tools/guardrails.py    # 33 checks: the wallet is the user's, the mining is visible
 flutter analyze                # clean
 ```
 

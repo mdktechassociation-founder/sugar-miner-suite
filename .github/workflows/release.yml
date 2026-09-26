@@ -1,0 +1,166 @@
+name: release — build the APKs and leave them where anyone can find them
+
+# Two things this removes, both of them manual:
+#
+#  1. "Where do I download the app?" — instead of somebody hunting through the
+#     Actions tab for the right run and downloading an artifact that expires, the
+#     APKs live on one permanent page: /releases/tag/latest. That link never rots.
+#  2. "Remember to rebuild before the artifact expires." — a weekly run rebuilds
+#     and replaces them, so the files are never stale and nobody has to remember a
+#     date. If the world moves (a Flutter or SDK update breaks the build), the
+#     weekly run is what tells us, with no human involved.
+#
+# Nothing is published that has not passed `tools/check_all.sh --strict` first.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Mondays at 03:00 UTC. The only reason this is a schedule rather than a
+    # push-only build is that push-only builds go stale when nobody pushes.
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: every check, strictly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: '17'
+
+      # The QR check compares against a second encoder and decodes the symbol with
+      # a real scanner, so the reference implementations have to be here.
+      - name: The reference implementations the checks compare against
+        run: |
+          pip install qrcode opencv-python-headless numpy
+          pip install embit
+
+      # The wallet package has no dependencies and is run with plain dart; the two
+      # apps need their pub packages before they can be analysed or tested.
+      - name: Dependencies
+        run: |
+          (cd sugar-wallet-miner && flutter pub get)
+          (cd sugar-miner-sdk && flutter pub get)
+          (cd sugar-miner-app && flutter pub get)
+
+      # --strict: in CI nothing is allowed to be skipped. A check that quietly
+      # turned into a no-op would be worse than no check at all.
+      - name: Everything this repository claims
+        run: tools/check_all.sh --strict
+
+  publish:
+    name: publish the APKs to the rolling release
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: '17'
+
+      - name: Dependencies
+        run: |
+          (cd sugar-wallet-miner && flutter pub get)
+          (cd sugar-miner-app && flutter pub get)
+
+      - name: Build the wallet app (the user's own wallet)
+        working-directory: sugar-wallet-miner
+        run: flutter build apk --release
+
+      - name: Build the miner app (an owner's own miner)
+        working-directory: sugar-miner-app
+        run: flutter build apk --release
+
+      # The APK is the artifact people install, so it is checked rather than
+      # trusted: the SDK's service, its reboot receiver and its notification
+      # permission have to be inside it, or this is not the app we think it is.
+      - name: The wallet APK really contains the miner
+        run: |
+          APK=sugar-wallet-miner/build/app/outputs/flutter-apk/app-release.apk
+          ls -la "$APK"
+          unzip -p "$APK" AndroidManifest.xml > /tmp/manifest.bin
+          for entry in SugarMiningService SugarBootReceiver RECEIVE_BOOT_COMPLETED \
+                       POST_NOTIFICATIONS PROPERTY_SPECIAL_USE_FGS_SUBTYPE \
+                       FOREGROUND_SERVICE_SPECIAL_USE; do
+            if strings -e l /tmp/manifest.bin | grep -q "$entry"; then
+              echo "  ok  $entry"
+            else
+              echo "  MISSING  $entry"; exit 1
+            fi
+          done
+
+      - name: Name them so a download is unambiguous
+        run: |
+          set -euo pipefail
+          VERSION="$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
+          mkdir -p out
+          cp sugar-wallet-miner/build/app/outputs/flutter-apk/app-release.apk \
+             "out/sugar-wallet-${VERSION}.apk"
+          cp sugar-miner-app/build/app/outputs/flutter-apk/app-release.apk \
+             "out/sugar-miner-${VERSION}.apk"
+          ls -la out
+
+      # gh is on every runner, so the release needs no third-party action.
+      - name: Update the rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view latest >/dev/null 2>&1; then
+            gh release create latest \
+              --prerelease \
+              --target "$GITHUB_SHA" \
+              --title "Latest build" \
+              --notes "Built from $(git rev-parse --short HEAD) on $(date -u +%Y-%m-%d). Rebuilt every week, so these files are never stale.
+
+          **sugar-wallet** — the user's own wallet. Makes a wallet on the phone and mines into it.
+          **sugar-miner** — an owner's own miner. Mines into an address you choose.
+
+          Both are sideloads, not Play Store listings: Google prohibits on-device cryptocurrency mining. Nothing here is published to any store."
+          fi
+          gh release upload latest out/*.apk --clobber
+          gh release edit latest \
+            --notes "Built from \`${GITHUB_SHA::7}\` on $(date -u +%Y-%m-%d) — every check in the repository passed first.
+
+          **sugar-wallet** — the user's own wallet. Makes a wallet on the phone and mines into it, and can spend what it holds.
+          **sugar-miner** — an owner's own miner. Mines into an address you choose.
+
+          Both are sideloads, not Play Store listings: Google prohibits on-device cryptocurrency mining. Rebuilt weekly, so these files are never stale."

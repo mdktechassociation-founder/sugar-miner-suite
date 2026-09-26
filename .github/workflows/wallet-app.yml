@@ -36,6 +36,12 @@ jobs:
       - name: Run the phrase vectors
         run: dart run packages/sugar_wallet/test/hd_vectors.dart
 
+      # The spend vectors are the ones that matter before a wallet is allowed to
+      # broadcast: BIP-143's published native-P2WPKH transaction, byte for byte,
+      # and a Sugarchain spend checked against an independent implementation.
+      - name: Run the spend vectors
+        run: dart run packages/sugar_wallet/test/spend_vectors.dart
+
   qr-symbol:
     name: the QR code is correct, and a real scanner reads it
     runs-on: ubuntu-latest

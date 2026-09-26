@@ -168,8 +168,10 @@ class _WalletScreenState extends State<WalletScreen> {
                 ],
                 const SizedBox(height: 8),
                 const Text(
-                  'Sugarchain addresses start with sugar1q. The wallet also has a legacy '
-                  '"S…" form, which some old wallets still want:',
+                  'SUGAR sent to either of these arrives at this wallet, and this app can '
+                  'spend from both. sugar1q… is the modern form and the cheaper one to spend '
+                  'from later; S… is the same wallet in the old format, for a service that '
+                  'refuses the new one.',
                   style: TextStyle(color: kMuted, fontSize: 12, height: 1.5),
                 ),
                 if (w != null) ...[

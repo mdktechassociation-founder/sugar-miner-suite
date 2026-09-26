@@ -20,9 +20,18 @@ export 'src/sugar_wallet.dart'
         base58CheckDecode,
         hash160Of,
         compressedPubkeyOf,
+        multiplyG,
+        multiplyPoint,
+        pointAdd,
+        decodePubkey,
+        curveOrder,
+        halfCurveOrder,
         toHex,
         fromHex;
 export 'src/bip32.dart' show ExtKey, sugarBip44Path, sugarOfficialMobilePath;
+export 'src/ecdsa.dart' show Signature, signHash, verifyHash;
+export 'src/transaction.dart'
+    show TxIn, TxOut, Transaction, Utxo, Spent, SendPlan, SendResult, signAll, sighashAll;
 export 'src/bip39.dart' show Mnemonic;
 export 'src/hmac.dart' show HmacSha512, Pbkdf2;
 export 'src/phrase_wallet.dart' show PhraseWallet;

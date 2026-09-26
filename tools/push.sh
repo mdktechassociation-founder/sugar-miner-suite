@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+#
+# One command to push this repository, with the token never stored anywhere.
+#
+#     tools/push.sh
+#
+# It asks for the token, uses it for this one push, and forgets it. The token is
+# not written to .git/config, not written to the remote, not exported into your
+# shell and not put on the command line — so it is not in `git remote -v`, not in
+# your shell history, and not in `ps`. Read with `read -s`, so it is not echoed
+# either.
+#
+# Use a fine-grained token with `Contents: Read and write` on this one repository,
+# and revoke it when you are done: https://github.com/settings/tokens
+
+set -euo pipefail
+
+REPO_SLUG="mdktechassociation-founder/sugar-miner-suite"
+BRANCH="${1:-main}"
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
+
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+  echo "this is not a git checkout" >&2
+  exit 2
+fi
+
+echo
+echo "  repository: $REPO_SLUG"
+echo "  branch:     $BRANCH"
+echo "  commits to send:"
+git log --oneline "@{u}..HEAD" 2>/dev/null | sed 's/^/    /' || git log --oneline -5 | sed 's/^/    /'
+echo
+
+if [[ "${SKIP_CHECKS:-0}" != "1" ]]; then
+  # Pushing is the one moment it is worth knowing the tree is good. Skip with
+  # SKIP_CHECKS=1 when you are pushing a docs change and know it.
+  printf '  run the checks first? [Y/n] '
+  read -r answer
+  if [[ ! "$answer" =~ ^[Nn]$ ]]; then
+    "$(dirname "${BASH_SOURCE[0]}")/check_all.sh" || {
+      echo
+      echo "  the checks failed — fix that, or SKIP_CHECKS=1 tools/push.sh to push anyway" >&2
+      exit 1
+    }
+  fi
+fi
+
+printf '\n  GitHub token (input hidden, used once, never stored): '
+read -rs TOKEN
+echo
+[[ -n "$TOKEN" ]] || { echo "  no token given" >&2; exit 2; }
+
+# The token goes in as the username of a one-shot URL. Nothing is configured, so
+# nothing is left behind afterwards.
+REMOTE="https://x-access-token:${TOKEN}@github.com/${REPO_SLUG}.git"
+
+echo
+if git push "$REMOTE" "HEAD:${BRANCH}"; then
+  TOKEN=""
+  echo
+  echo "  pushed."
+  echo "  CI:      https://github.com/${REPO_SLUG}/actions"
+  echo "  release: https://github.com/${REPO_SLUG}/releases/tag/latest"
+  echo
+  echo "  Revoke the token now if you made it for this: https://github.com/settings/tokens"
+else
+  TOKEN=""
+  echo "  the push failed — the token may lack Contents: write on this repository" >&2
+  exit 1
+fi

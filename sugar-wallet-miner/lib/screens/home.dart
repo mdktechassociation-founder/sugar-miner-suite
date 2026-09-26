@@ -18,9 +18,11 @@ import '../app_config.dart';
 import '../services/history.dart';
 import '../services/pool_api.dart';
 import '../services/price_api.dart';
+import '../services/wallet_store.dart';
 import '../theme.dart';
 import '../widgets/sparkline.dart';
 import 'receive.dart';
+import 'send.dart';
 
 /// The pool pays out when the balance reaches its own threshold. The app does not
 /// set that number — it cannot, it is the pool's policy — so it is shown as an
@@ -38,6 +40,10 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  /// The legacy `S…` form of this wallet, read from the store once so the receive
+  /// screen can offer both. It is public information — the same address the user
+  /// hands out — so it lives in preferences beside the segwit one.
+  String? _legacyAddress;
   Timer? _tick;
   StreamSubscription? _statsSub;
   StreamSubscription? _decisionsSub;
@@ -98,6 +104,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refreshLocal() async {
+    // The other address this same key has, for the receive screen's switch. It
+    // rarely changes, so it is read once and kept.
+    if (_legacyAddress == null) {
+      final details = await WalletStore.details();
+      final legacy = details['legacy'];
+      if (legacy != null && legacy.isNotEmpty && mounted) {
+        setState(() => _legacyAddress = legacy);
+      }
+    }
     final miner = SugarMinerSdk.instance;
     if (miner == null) return;
     final status = await miner.status();
@@ -168,10 +183,20 @@ class _HomeScreenState extends State<HomeScreen> {
         MaterialPageRoute(
           builder: (_) => ReceiveScreen(
             address: widget.address,
+            legacyAddress: _legacyAddress,
             appName: AppConfig.appName,
           ),
         ),
       );
+
+  Future<void> _openSend() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => SendScreen(address: widget.address)),
+    );
+    // A send changes what the address holds, so the balance shown behind this
+    // screen is stale the moment the transaction is accepted.
+    await _refreshPool();
+  }
 
   /// "about $0.0001", or null when the price is unknown. Callers show a dash.
   String? _usd(double sugar, {int decimals = 6}) {
@@ -193,6 +218,11 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('SUGAR Wallet'),
         actions: [
+          IconButton(
+            tooltip: 'Send',
+            onPressed: _openSend,
+            icon: const Icon(Icons.arrow_upward),
+          ),
           IconButton(
             tooltip: 'Receive',
             onPressed: _openReceive,
@@ -567,6 +597,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     onPressed: _openReceive,
                     icon: const Icon(Icons.qr_code_2, size: 18),
                     label: const Text('Show QR code'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _openSend,
+                    icon: const Icon(Icons.arrow_upward, size: 18),
+                    label: const Text('Send'),
                   ),
                 ),
               ],

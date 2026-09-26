@@ -218,12 +218,61 @@ class SugarWallet {
       throw FormatException(
           'that key belongs to another network (prefix 0x${decoded[0].toRadixString(16)})');
     }
+    // A compressed-key WIF is prefix + 32 bytes + a 0x01 marker. Anything shorter
+    // is an *uncompressed* key — what wallets from the Bitcoin-1.x era wrote — and
+    // accepting it silently would be the worst outcome available: this app would
+    // derive the compressed address of the same secret, show an empty wallet, and
+    // the user would conclude their coins were gone. The two addresses are
+    // genuinely different, so the only honest answers are "import it as
+    // uncompressed" (not supported) or "say so".
+    if (decoded.length != 34 || decoded[33] != 0x01) {
+      throw const FormatException(
+          'this WIF holds an uncompressed key, which is a different address from the '
+          'compressed one — importing it here would show you an empty wallet. This app '
+          'generates and reads compressed keys only (a WIF ending in the marker byte). '
+          'Sugarchain Core can import this one as it is.');
+    }
     return SugarWallet.fromPrivateKey(decoded.sublist(1, 33), network: net);
   }
 
   String get privateKeyHex => toHex(privateKey);
   String get wifOrHex => wif;
 }
+
+/// k·G — point multiplication on secp256k1, exposed for the signing code.
+ECPoint multiplyG(BigInt k) => _mul(k, ECPoint(_Curve.gx, _Curve.gy));
+
+/// P + Q on the curve, or null when the sum is the point at infinity.
+ECPoint? pointAdd(ECPoint? a, ECPoint? b) => _add(a, b);
+
+/// k·P for an arbitrary curve point. Exposed because verifying a signature needs
+/// it and converting a public key back to a point does too.
+ECPoint multiplyPoint(BigInt k, ECPoint point) => _mul(k, point);
+
+/// A compressed (or uncompressed) public key back into a point.
+///
+/// Only needed to *check* a signature — and that check is the point: a wallet that
+/// signs without ever verifying has no way to notice that it signed the wrong
+/// thing.
+ECPoint decodePubkey(Uint8List pubkey) {
+  if (pubkey.length == 33 && (pubkey[0] == 0x02 || pubkey[0] == 0x03)) {
+    final x = bytesToBigInt(pubkey.sublist(1));
+    // y² = x³ + 7 (mod p), and the parity byte says which of the two roots.
+    final ySquared = _mod(x * x * x + BigInt.from(7));
+    var y = ySquared.modPow((_Curve.p + BigInt.one) >> 2, _Curve.p);
+    if ((y.isEven ? 0x02 : 0x03) != pubkey[0]) y = _Curve.p - y;
+    return ECPoint(x, y);
+  }
+  if (pubkey.length == 65 && pubkey[0] == 0x04) {
+    return ECPoint(bytesToBigInt(pubkey.sublist(1, 33)), bytesToBigInt(pubkey.sublist(33)));
+  }
+  throw ArgumentError('not a public key: ${pubkey.length} bytes starting ${pubkey[0]}');
+}
+
+/// The order of the secp256k1 group, and half of it: a signature's s is kept
+/// below the halfway mark so nodes will relay it.
+BigInt get curveOrder => _Curve.n;
+BigInt get halfCurveOrder => _Curve.n >> 1;
 
 /// The compressed public key for a 32-byte private key.
 ///

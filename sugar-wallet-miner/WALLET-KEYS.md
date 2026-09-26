@@ -114,3 +114,58 @@ whenever the input is words, and why both paths are pinned by tests.
 | `importprivkey` | a WIF | the key, and all three of its addresses — **this is the one** |
 | `importaddress` / `importpubkey` | address / public key | watch only, cannot spend |
 | `importwallet` / `importmulti` | a `dumpwallet` file, or scripts+keys | bulk restore inside Core only |
+
+---
+
+## The short version: this wallet works anywhere a WIF works
+
+There is one secret and it has one standard form. `w.wif` is a normal Sugarchain
+mainnet WIF — base58check, prefix `0x80`, compressed-key marker — so pasting it into
+another wallet produces the same wallet, not a similar one:
+
+| paste the WIF into | what you get |
+|---|---|
+| **Sugarchain Core** — `importprivkey <wif>` | the key, and **all of its addresses**, because Core scans the chain for every script form a single key can own (`LearnAllRelatedScripts`). Spending from Core then works for whichever of them holds the coins. |
+| **the web wallet** (coinbin-derived) | the same wallet from the WIF, or from the xprv if you prefer to give it the extended key |
+| **this app**, by pasting the WIF back | the same wallet, the same two addresses, the same coins |
+| a BIP-39 wallet | not the WIF — that one wants the **twelve words**, at coin type 408 |
+
+### One key, two addresses
+
+A single key controls two addresses, and both of them are this wallet:
+
+| | `sugar1q…` — P2WPKH (native segwit) | `S…` — P2PKH (legacy) |
+|---|---|---|
+| where it comes from | this app, the mining SDK, the official Android wallet | Core, the web wallet, any old tool |
+| receiving | yes | yes — the receive screen hands out whichever you pick |
+| spending | yes, signed with BIP-143 | yes, signed the pre-segwit way |
+| cost to spend a coin | 68 vB | 148 vB — more than twice |
+| mining pays here | **yes** — the miner takes a `sugar1q…` address | no |
+
+So: give out the `sugar1q…` address unless a sender insists on the old format, and
+mine to it always. Coins that arrive at the `S…` address are still spendable here and
+in Core; they are only more expensive to move. The receive screen has the switch, and
+says which is which.
+
+### Verified for both halves
+
+Both ways of signing are checked against things this repository did not write:
+
+| | vector | result |
+|---|---|---|
+| segwit (BIP-143) | **BIP-143's own published transaction**, rebuilt from scratch | its published sighash and its published signature, byte for byte |
+| segwit, whole spend | Python's `embit`, an independent implementation | same signature, same raw transaction, same txid |
+| legacy (P2PKH) | Python's `embit`, legacy sighash and signing | same sighash, same DER signature, same raw bytes, same txid |
+| address derivation | `embit` on the same key | `SZrn9Y64wiWg19Tj4cfCqfPK9MKnPFxMYE`, identical |
+| the signature in the app | verified in-test with the package's own verifier | a signature that does not verify cannot pass the test |
+
+`dart run packages/sugar_wallet/test/spend_vectors.dart` runs all of it: 28 checks.
+
+### The one WIF this app refuses
+
+An **uncompressed** WIF — no `0x01` marker, which is what Bitcoin-1.x-era wallets
+wrote and what Core still holds for keys imported that way. Its address is a
+*different* address from the compressed key's, so importing it here would derive the
+other one, show an empty wallet, and look exactly like lost coins. The app says so
+instead, and says what to do about it. Everything this app generates is compressed,
+so nothing made here is affected.

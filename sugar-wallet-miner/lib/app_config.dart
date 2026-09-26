@@ -67,7 +67,11 @@ class PoolInfo {
   static const stratum = 'stratum.poolab.org:8451';
   static const statsUrl = 'https://poolab.org/api/worker_stats?address=';
   static const poolStatsUrl = 'https://poolab.org/api/stats?coin=sugarchain';
-  static const explorer = 'https://sugar.bitaps.com/address/';
+  // There used to be an `explorer` constant here pointing at sugar.bitaps.com.
+  // That host does not resolve any more, no screen ever used the constant, and a
+  // dead link is worse than no link: it is a promise the app cannot keep. The
+  // chain's own API (see ChainApi) is where a transaction or address can be
+  // looked up, and it is the same service the official web wallet uses.
 
   /// The chain's economics, for the earnings estimate. From Sugarchain's own
   /// source: 42.94967296 SUGAR per block, 5-second blocks (so 17,280 a day).

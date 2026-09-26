@@ -74,19 +74,35 @@ def main():
           not re.search(r'(firebase|sentry|amplitude|mixpanel|adjust|appsflyer|facebook)',
                         pubspec, re.I),
           'the app talks to its own pool and nothing else')
-    check('the app sends nothing anywhere: only GETs to the pool',
-          'HttpClient' in everything
-          and 'method: \'POST\'' not in everything
-          and '.post(' not in everything,
-          'no POST exists in this app, so no data can be uploaded')
+    # The wallet now has exactly one write in it, because a wallet that cannot
+    # spend is not a wallet: a signed transaction, handed to the chain. Everything
+    # else it does is a read. This is checked by shape — the POST may only exist in
+    # the one helper that performs it, and only the chain service may call it.
+    posters = {path for path, src in sources.items()
+               if 'postUrl(' in src or "'POST'" in src or 'httpPostText(' in src}
+    check('the only write in this app is one signed transaction, to the chain',
+          posters <= {'lib/services/net.dart', 'lib/services/net_io.dart',
+                      'lib/services/net_web.dart', 'lib/services/chain_api.dart'},
+          f'a POST appeared in {sorted(posters - {"lib/services/net.dart", "lib/services/net_io.dart", "lib/services/net_web.dart", "lib/services/chain_api.dart"})}')
+    chain = sources.get('lib/services/chain_api.dart', '')
+    check('what is posted is a transaction, and it goes to the chain\'s own endpoint',
+          "broadcastPath = '/esplora/tx'" in chain
+          and "post('$base$broadcastPath'" in chain
+          and 'rawHex' in chain,
+          'the one POST must carry a signed transaction to /esplora/tx')
+    check('the key is not in what is broadcast, and cannot be',
+          'privateKey' not in _http_sections(everything)
+          and 'phrase' not in _http_sections(everything)
+          and 'signAll(' in sources.get('lib/screens/send.dart', ''),
+          'signing happens on the device; only the signed bytes are posted')
     # api.coingecko.com is here deliberately, and it is the only third party this
     # app ever added. It is asked one fixed question — what is SUGAR worth — and
     # the request carries no address, no identifier and no key. The three checks
     # around it are the price of letting it in: the URL must stay that exact
     # public one, the app must survive it being down, and the policy must say so.
     hosts = set(re.findall(r'https?://([a-z0-9.\-]+)', everything))
-    check('the only hosts contacted are the pool, an explorer, and the named price feed',
-          hosts <= {'poolab.org', 'github.com', 'sugar.bitaps.com', 'api.coingecko.com'},
+    check('the only hosts contacted are the pool, the chain, and the named price feed',
+          hosts <= {'poolab.org', 'github.com', 'api.sugar.wtf', 'api.coingecko.com'},
           str(sorted(hosts)))
     check('the price feed is asked one fixed question and nothing about the user',
           'api.coingecko.com/api/v3/simple/price?ids=sugarchain&vs_currencies=usd'

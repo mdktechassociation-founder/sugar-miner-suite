@@ -147,6 +147,28 @@ void main() {
     ok('wrong-network WIF is rejected', true);
   }
 
+  // An uncompressed-key WIF — what a Bitcoin-1.x-era wallet wrote, and what Core
+  // still writes for keys it imported that way. Its address is a *different*
+  // address from the compressed key's, so accepting it quietly would show the user
+  // an empty wallet and let them conclude their coins were gone.
+  final uncompressedPayload = Uint8List(33)
+    ..[0] = 0x80
+    ..setRange(1, 33, fromHex('${'0' * 63}1'));
+  final uncompressedWif = base58Check(uncompressedPayload);
+  try {
+    final w = SugarWallet.import(uncompressedWif);
+    ok('an uncompressed WIF is refused, not silently given a different address',
+        false,
+        'it was accepted and produced ${w.address}, which is not the address of the '
+            'uncompressed key — the coins would look lost');
+  } on FormatException catch (e) {
+    ok('an uncompressed WIF is refused, not silently given a different address',
+        '$e'.contains('uncompressed'), '$e');
+  }
+  // and the compressed WIF of the same secret is still fine
+  eq('the compressed WIF of the same key still imports',
+      SugarWallet.import(k1.wif).address, k1.address);
+
   print('\naddress checks reject the wrong things');
   ok('empty string', !looksLikeSugarAddress(''));
   ok('bitcoin address', !looksLikeSugarAddress('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4'));

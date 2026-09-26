@@ -178,11 +178,44 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           _PhraseCard(phrase: _phrase!),
           const SizedBox(height: 16),
         ],
-        _LabeledValue(label: 'Your address', value: w.address, mono: true),
+        _LabeledValue(label: 'Your address — where mining pays', value: w.address, mono: true),
         const SizedBox(height: 10),
-        _LabeledValue(label: 'Private key (WIF)', value: w.wif, mono: true),
+        _LabeledValue(
+          label: 'Your other address, same wallet (legacy, for old wallets)',
+          value: w.legacyAddress,
+          mono: true,
+        ),
+        const SizedBox(height: 10),
+        _LabeledValue(label: 'Private key — the WIF you log in with', value: w.wif, mono: true),
         const SizedBox(height: 10),
         _LabeledValue(label: 'Private key (hex)', value: w.privateKeyHex, mono: true),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: kPanel2,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: kLine),
+          ),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('One key, two addresses',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
+              SizedBox(height: 4),
+              Text(
+                'The sugar1q… address is where your phone mines, and it is the cheaper one '
+                'to spend from later. The S… address is the same wallet in the old format, '
+                'for a service that refuses the new one. SUGAR sent to either arrives here, '
+                'and this app can spend from both.\n\n'
+                'The WIF is what you type into another wallet to get this same wallet back — '
+                'Core, the web wallet, anything that takes a WIF. It is the login, so it is '
+                'also the thing to keep private: anyone who has it owns the coins.',
+                style: TextStyle(color: kMuted, fontSize: 12, height: 1.5),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 14),
         OutlinedButton.icon(
           onPressed: () async {

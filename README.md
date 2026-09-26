@@ -106,6 +106,34 @@ pinned by published vectors — NIST digests, RFC 4231, the BIP-39 reference set
 BIP-32 test vector 1 six chains deep. The composed claim (these words make this
 address) is cross-checked against `bip-utils`, a second implementation.
 
+The same package now **spends**: secp256k1 ECDSA with RFC 6979 deterministic
+nonces, low-S normalisation, DER encoding, and BIP-143 P2WPKH signing. That is
+verified the same way and against the hardest vector there is — BIP-143's own
+published transaction, rebuilt from scratch and required to produce its published
+sighash and its published signature byte for byte — plus a whole Sugarchain spend
+compared against Python's `embit`: same sighash, same signature, same raw bytes,
+same txid. Sending is done on the device: the app asks the chain what the address
+holds and what it charges per virtual byte, builds the transaction, shows the
+amount, fee, change and total on one card, and signs only when the user presses
+send. The one write the wallet app performs is `POST /esplora/tx`, carrying a
+signed transaction and nothing about the person who signed it.
+
+## Checking it, and releasing it
+
+Two commands cover the whole suite:
+
+```bash
+tools/check_all.sh            # every check in the repository, one command
+tools/check_all.sh --strict   # and fail if anything had to be skipped (CI does this)
+tools/push.sh                 # push it: token used once, never stored
+```
+
+Releases publish themselves. `.github/workflows/release.yml` runs `check_all.sh
+--strict`, builds both APKs, checks the merged manifest inside the wallet APK, and
+uploads them to one permanent page — `releases/tag/latest` — on every push to `main`
+and again every week, so the download link never goes stale and nobody has to
+remember an expiry date.
+
 ## How the phases fit together
 
 ```
@@ -168,7 +196,7 @@ every push:
 | component | what CI proves |
 |---|---|
 | `sugar-miner-sdk/` | 55 guardrails: consent gates the start path, no stealth keyword exists, the notification is ongoing with a Stop action, auto-config never exceeds the ceiling · 11,200 core-plan combinations where the budget stays a ceiling · the C core reproduces the SugarChain genesis PoW hash · the example APK really contains `libyespower.so` |
-| `sugar-wallet-miner/` | 36 wallet vectors (BIP-173 + a second implementation) · 20 QR checks against a second encoder **and** a real scanner · 31 guardrails · the release APK contains the miner service, the boot receiver and the notification permission |
+| `sugar-wallet-miner/` | 36 wallet vectors (BIP-173 + a second implementation) · 61 phrase vectors · 19 spend vectors against BIP-143 and `embit` · 22 app tests · 20 QR checks against a second encoder **and** a real scanner · 33 guardrails · the release APK contains the miner service, the boot receiver and the notification permission |
 | `minehub/` | 71 end-to-end tests · 19 wallet vectors · clean mode adds exactly one import line and hashes every other file · compiled APKs are refused with the reason in code · no stealth, no key custody, no repackaging |
 | `sugar-miner/` | the page still produces a consensus-correct genesis hash, and no payout address is hard-coded in it |
 | `sugar-miner-app/` | the native core self-test, then release APKs (per-ABI and universal) |

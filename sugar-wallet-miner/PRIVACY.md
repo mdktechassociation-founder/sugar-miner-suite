@@ -24,8 +24,13 @@ number or account, because the app never asks for any of those.
   generated locally and stored in the platform keystore. No code path in this app
   sends them anywhere.
 - **Nothing else.** There is no analytics SDK, no crash reporter, no advertising
-  identifier, no device fingerprinting, and no POST request of any kind in this
-  app's code. The guardrails check fails the build if a network write appears.
+  identifier and no device fingerprinting. The app's only write to any network is
+  `POST /esplora/tx` on the chain's API, and its body is a **signed transaction**:
+  the thing that is about to be public anyway, because broadcasting means putting it
+  in front of every node on the chain. That request carries no key, no phrase, no
+  address of yours that the transaction does not already contain, and no
+  identifier — the API cannot tell who sent it. A guardrail fails the build if a
+  POST appears anywhere else in the app.
 
 ## What is stored on the device
 
