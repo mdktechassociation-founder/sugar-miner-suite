@@ -164,10 +164,17 @@ if have node; then
       if have "$candidate"; then CHROME_BIN="$(command -v "$candidate")"; break; fi
     done
   fi
-  if [[ -n "$CHROME_BIN" || -n "$(ls -d "${HOME}"/.cache/chrome/*/ 2>/dev/null)" ]]; then
-    run "browser miner — the published page in a real browser" sugar-miner node tools/verify_chrome.js
+  # The check finds every Chromium-family browser itself — Chrome, Edge, Chromium, or
+  # a downloaded headless shell — and runs the page in each. BROWSERS=… overrides, and
+  # dropping a new browser on the machine is enough to have it tested; nobody edits
+  # this list to add one.
+  if [[ -n "$CHROME_BIN" ]] || have google-chrome || have google-chrome-stable \
+     || have chromium || have chromium-browser || have microsoft-edge || have microsoft-edge-stable \
+     || [[ -n "$(ls -d "${HOME}"/.cache/chrome/*/ "${HOME}"/.cache/puppeteer/*/ 2>/dev/null)" ]]; then
+    BROWSERS="${BROWSERS:-${CHROME_BIN:+$CHROME_BIN}}" \
+      run "browser miner — the published page in real browsers" sugar-miner node tools/verify_browser.js
   else
-    skip "browser miner in a real browser" "no Chrome or Chromium here — set CHROME=/path/to/chrome"
+    skip "browser miner in real browsers" "no Chrome, Edge or Chromium here — set BROWSERS=/path/to/browser"
   fi
 else
   skip "browser miner in a real browser" "node is not installed"

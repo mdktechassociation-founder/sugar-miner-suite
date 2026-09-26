@@ -1,6 +1,6 @@
 /*
  * tools/chrome_harness.js — runs *inside* the browser, injected into a copy of the
- * published page by tools/verify_chrome.js. Nothing here is executed by Node.
+ * published page by tools/verify_browser.js. Nothing here is executed by Node.
  *
  * The page's own globals are what we drive: `WASM_BUILDS` (the inlined SIMD and
  * scalar builds), `createYespower` (the emscripten loader) and `b64bytes`. This
@@ -131,7 +131,7 @@
         note(build.label + ' build reproduces the genesis PoW hash', false, e.message || String(e));
       }
     }
-    note('this Chrome compiled the SIMD build', simdCompiled,
+    note('this browser compiled the SIMD build', simdCompiled,
       simdCompiled ? '' : 'it falls back to the scalar build \u2014 correct, but worth knowing');
     note('WebAssembly SIMD is available to the page',
       typeof WebAssembly.validate === 'function');

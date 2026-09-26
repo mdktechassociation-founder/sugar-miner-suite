@@ -25,6 +25,16 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
   exit 2
 fi
 
+# A commit needs a name on it, and `.git/config` is not always carried around (it is
+# excluded from snapshots, and some checkouts are restored without it). Rather than
+# failing with git's "empty ident name" after somebody has already typed a message,
+# fill in the identity this repository's history uses.
+if [[ -z "$(git config user.name 2>/dev/null)" || -z "$(git config user.email 2>/dev/null)" ]]; then
+  git config user.name "MineHub"
+  git config user.email "minehub@users.noreply.github.com"
+  echo "  (set the commit identity to MineHub — .git/config did not have one)"
+fi
+
 echo
 echo "  repository: $REPO_SLUG"
 echo "  branch:     $BRANCH"

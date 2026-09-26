@@ -74,10 +74,10 @@ What CI actually proves on every push:
 
 That question is not answered by a test suite in Node, and it is the one that matters
 for a page. `tools/verify.js` runs the page's code with Node's WebAssembly and no DOM;
-`tools/verify_chrome.js` serves the published file over HTTP and opens it in real
-headless Chrome, which is the only way to find out whether this browser will compile
-the SIMD module, whether the page throws before it connects, or whether something in
-the DOM broke.
+`tools/verify_browser.js` serves the published file over HTTP and opens it in every
+Chromium-family browser on the machine — Chrome, Edge, Chromium, or a headless shell —
+which is the only way to find out whether *that* browser will compile the SIMD module,
+whether the page throws before it connects, or whether something in the DOM broke.
 
 It checks, in the browser: that both engines reproduce the Sugarchain genesis PoW hash
 (the same vector the Node harness uses), that the page's own `sha256d` reproduces the
@@ -85,12 +85,18 @@ genesis block hash, that the payout field still ships empty and the bridge field
 names a third party, and that nothing was logged as an error.
 
 ```bash
-node tools/verify_chrome.js        # needs Chrome or Chromium; CHROME=/path/to/chrome otherwise
+node tools/verify_browser.js                        # every browser it can find
+BROWSERS=/usr/bin/microsoft-edge node tools/verify_browser.js   # just one
 ```
 
-It exits 77 and says so when no browser is installed, so a machine without Chrome
-reports "not checked" instead of a green tick nobody earned. `tools/check_all.sh` runs
-it with everything else.
+Each browser gets its own pass/fail. Installing Edge is enough for Edge to be tested —
+nothing is configured by hand for a new browser. It uses a throwaway profile, so it
+never touches a real one.
+
+It exits 77 and says so when no browser is installed, so a machine without one reports
+"not checked" instead of a green tick nobody earned. `tools/check_all.sh` runs it with
+everything else, and on GitHub's runners Chrome and Edge are both present, so both are
+covered on every push.
 
 ## Facts about the coin/pool, measured, not guessed
 

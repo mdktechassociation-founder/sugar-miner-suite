@@ -130,13 +130,14 @@ The rule for this section: if a human has to remember it, it is a bug.
 | keep six copies of the SDK version pin in agreement, by hand | one source of truth (`the SDK's pubspec`) and `tools/sdk_pin.py` — the check fails the moment a pin drifts, and `--fix` rewrites them all |
 | remember to tag the SDK so `ref: sdk-vX.Y.Z` resolves | `tools/push.sh` pushes the tag with the branch; CI creates it too, for pushes made any other way |
 | watch an APK's signing certificate expire | it is minted at build time and valid to 2056, and the file is replaced weekly |
-| take it on faith that the published page works in a browser, because a Node harness said the code was correct | the published file is loaded into a real headless Chrome on every check: both engines must reproduce the genesis PoW hash there, the DOM must still ship an empty payout field, and nothing may be logged as an error |
+| take it on faith that the published page works in a browser, because a Node harness said the code was correct | the published file is loaded into every Chromium-family browser on the machine — Chrome, Edge, Chromium, a downloaded shell — and each must reproduce the genesis PoW hash with both engines, keep an empty payout field, and log no errors. Installing a browser is enough to have it tested |
 | push by hand, with the token going into git config or the shell history | `tools/push.sh` — asks for the token, uses it for one push, forgets it; nothing stored, nothing echoed, nothing in `ps` |
 | paste an address into the send screen by long-press and a system menu | one tap on the paste button; the address is checked the moment it lands and the app says whether it looks right |
 
 The two commands a person ever needs:
 
 ```bash
+tools/dev_setup.sh              # on a machine with nothing installed yet
 tools/check_all.sh              # is everything still true?
 tools/push.sh                   # send it, and its tag with it
 python3 tools/sdk_pin.py --fix  # only if the check says a pin drifted
