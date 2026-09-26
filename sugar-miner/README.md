@@ -70,6 +70,28 @@ What CI actually proves on every push:
 * **wire format** — prevhash word-swap, `ntime` passthrough, 80-byte header, little-endian nonce;
 * **safety** — no wallet address or third-party proxy is baked into the published page.
 
+## Does it actually run in a browser?
+
+That question is not answered by a test suite in Node, and it is the one that matters
+for a page. `tools/verify.js` runs the page's code with Node's WebAssembly and no DOM;
+`tools/verify_chrome.js` serves the published file over HTTP and opens it in real
+headless Chrome, which is the only way to find out whether this browser will compile
+the SIMD module, whether the page throws before it connects, or whether something in
+the DOM broke.
+
+It checks, in the browser: that both engines reproduce the Sugarchain genesis PoW hash
+(the same vector the Node harness uses), that the page's own `sha256d` reproduces the
+genesis block hash, that the payout field still ships empty and the bridge field never
+names a third party, and that nothing was logged as an error.
+
+```bash
+node tools/verify_chrome.js        # needs Chrome or Chromium; CHROME=/path/to/chrome otherwise
+```
+
+It exits 77 and says so when no browser is installed, so a machine without Chrome
+reports "not checked" instead of a green tick nobody earned. `tools/check_all.sh` runs
+it with everything else.
+
 ## Facts about the coin/pool, measured, not guessed
 
 * PoW = yespower 1.0.1, `N=2048`, **`r=32`**, 74-byte personalisation

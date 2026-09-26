@@ -150,6 +150,29 @@ else
   skip "browser miner" "node is not installed"
 fi
 
+# ── 5b. the same page, in a real browser ────────────────────────────────────
+# The check above runs the page's code in Node, which proves the JavaScript and the
+# WebAssembly are correct. It cannot prove the page *runs in a browser*: no DOM, no
+# rendering, no Content-Security-Policy, and no browser deciding whether a SIMD module
+# compiles. This one loads the published file in headless Chrome and asks it the
+# questions only a browser can answer. It needs a browser, so on a machine without one
+# it reports a skip rather than pretending.
+if have node; then
+  CHROME_BIN="${CHROME:-}"
+  if [[ -z "$CHROME_BIN" ]]; then
+    for candidate in google-chrome-stable google-chrome chromium chromium-browser; do
+      if have "$candidate"; then CHROME_BIN="$(command -v "$candidate")"; break; fi
+    done
+  fi
+  if [[ -n "$CHROME_BIN" || -n "$(ls -d "${HOME}"/.cache/chrome/*/ 2>/dev/null)" ]]; then
+    run "browser miner — the published page in a real browser" sugar-miner node tools/verify_chrome.js
+  else
+    skip "browser miner in a real browser" "no Chrome or Chromium here — set CHROME=/path/to/chrome"
+  fi
+else
+  skip "browser miner in a real browser" "node is not installed"
+fi
+
 # ── 6. the platform ─────────────────────────────────────────────────────────
 if have python3; then
   run "minehub — build the console" minehub python3 build.py

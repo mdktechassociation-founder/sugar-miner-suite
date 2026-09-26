@@ -71,7 +71,13 @@ else
 fi
 
 echo
-if git push "$REMOTE" "HEAD:${BRANCH}" "refs/tags/${SDK_TAG}"; then
+if git push "$REMOTE" "HEAD:${BRANCH}"; then
+  # The tag goes afterwards, on its own. Pushed together with the branch it could
+  # fail the whole push for being already present — which fails the push that carried
+  # the actual work over a tag that was already correct. The branch is what matters.
+  git push "$REMOTE" "refs/tags/${SDK_TAG}" >/dev/null 2>&1 \
+    && echo "  the SDK tag $SDK_TAG is on the remote" \
+    || echo "  ($SDK_TAG is already on the remote, or could not be pushed — the branch is fine)"
   TOKEN=""
   echo
   echo "  pushed."
