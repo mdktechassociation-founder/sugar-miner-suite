@@ -42,7 +42,7 @@ checked, and how.
 |---|---|
 | Android, iOS, Linux, Windows, macOS, web | `every platform this suite claims` — a platform that stops building is a platform this repository no longer supports, and nobody has to find out from a user |
 | the mining engine anywhere | `sdk — the native core is consensus-correct` — builds the C and checks it against Sugarchain's genesis |
-| the published page | `browser miner — the page and the bridge behave` (Node) and `browser miner — the published page in real browsers` (every Chromium installed, each with its own pass/fail) |
+| the published page | `browser miner — the page and the bridge behave` (Node) and `browser miner — the published page in real browsers` (every Chromium installed, each with its own pass/fail; CI writes the list of browsers it tested to the run's summary page, so which ones were covered is visible without downloading a log) |
 | the APK people download | `release.yml` opens the built wallet APK and asserts the service, receiver and permissions are inside it before anything is published |
 
 All of it runs behind one command, `tools/check_all.sh`, and every push to `main` runs

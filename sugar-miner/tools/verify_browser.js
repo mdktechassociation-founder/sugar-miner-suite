@@ -182,6 +182,7 @@ async function main() {
       failed++;
       continue;
     }
+    browser.version = result.version;      // for the CI summary below
     console.log(`    ${result.version || '(version unknown)'}`);
     for (const line of result.lines) {
       const pass = line.startsWith('PASS');
@@ -192,6 +193,22 @@ async function main() {
   }
 
   console.log('');
+  const summary = `${checked} browser(s): ` +
+    browsers.map((b) => `${b.label} (${(b.version || '').replace(/^[^0-9]*/, '')})`).join(', ');
+
+  // On CI, write it where it can be read without admin rights or a log download: the
+  // run's own summary page. Which browsers were tested is part of the result, not a
+  // detail — "it passed in Chrome" and "it passed in Chrome and Edge" are different
+  // claims, and the person reading the run should not have to guess which one it is.
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    try {
+      fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+        `### The published page, in real browsers\n\n` +
+        `${failed ? '❌' : '✅'} ${summary}\n\n` +
+        browsers.map((b) => `- ${b.label}: ${b.version || 'version unknown'} at \`${b.path}\``).join('\n') + '\n');
+    } catch { /* a summary that cannot be written must never fail the check */ }
+  }
+
   if (failed) {
     console.log(`  ${failed} check(s) failed across ${browsers.length} browser(s)`);
     process.exit(1);
