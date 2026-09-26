@@ -325,10 +325,6 @@ class _ExampleHomeState extends State<ExampleHome> {
               ),
             ),
           ),
-          if (miner.currentProfile.canMine || true) ...[
-            const SizedBox(height: 12),
-            SugarMiningTile(miner: miner),
-          ],
           const SizedBox(height: 12),
           Card(
             child: Padding(

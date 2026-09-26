@@ -67,8 +67,8 @@ submitting shares, and the notification eventually goes away with the service.
 
 * Ask with `ServiceBridge.requestIgnoreBatteryOptimizations()` — it opens the
   system dialog ("Allow app to run in the background?").
-* Check with `ServiceBridge.isIgnoringBatteryOptimizations()`; the SDK shows the
-  status in `SugarMiningTile` and in `status()`.
+* Check with `ServiceBridge.isIgnoringBatteryOptimizations()`; the answer is in
+  `status()`, so your own screen can say whether it is exempt.
 * If the user declines, mining still runs — just with the normal Android
   lifecycle, which means it can be frozen after a while in the background.
 

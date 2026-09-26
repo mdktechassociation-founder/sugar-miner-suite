@@ -36,7 +36,7 @@ SDK_GIT = 'https://github.com/mdktechassociation-founder/sugar-miner-suite.git'
 # SDK carries the platform capability layer (web refuses in words, desktop mines
 # while the window is open) and the CMake core bundling. v2.0.0 still exists and
 # still works on Android — it just predates all of that.
-SDK_REF = 'sdk-v2.1.0'
+SDK_REF = 'sdk-v2.2.0'
 # The engine lives in a subfolder of the suite now, so every dependency this service
 # writes carries a path as well as a ref. Pub resolves a git dependency with a path,
 # which is what keeps "pin a tag" working after the merge into one repository.

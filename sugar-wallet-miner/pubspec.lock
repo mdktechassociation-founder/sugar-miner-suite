@@ -467,7 +467,7 @@ packages:
       path: "../sugar-miner-sdk"
       relative: true
     source: path
-    version: "2.0.0"
+    version: "2.2.0"
   sugar_wallet:
     dependency: "direct main"
     description:

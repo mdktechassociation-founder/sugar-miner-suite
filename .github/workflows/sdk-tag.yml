@@ -1,0 +1,59 @@
+name: sdk tag — the version labels itself
+
+# The SDK is consumed by tag: a developer's pubspec and MineHub's wrapper both pin
+# `sdk-vX.Y.Z` rather than a branch. That only works if the tag exists, and a tag
+# somebody has to remember to push is a tag that is sometimes missing.
+#
+# So the tag is not a human step any more. `sugar-miner-sdk/pubspec.yaml` is the
+# source of truth, this creates `sdk-v<version>` from it the moment the version
+# changes, and `tools/sdk_pin.py` keeps every mention of the tag honest. The three
+# things cannot disagree without one of them failing loudly.
+#
+# Note: the tag is pushed with the workflow's own GITHUB_TOKEN, which by design does
+# not start further workflows — so this cannot loop.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sugar-miner-sdk/pubspec.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sdk-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: tag the SDK version if it is new
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Create the tag nobody had to remember
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="$(sed -n 's/^version:[[:space:]]*//p' sugar-miner-sdk/pubspec.yaml \
+            | head -1 | tr -d '[:space:]')"
+          VERSION="${VERSION%%+*}"          # drop any +build suffix
+          if [[ -z "$VERSION" ]]; then
+            echo "no version in sugar-miner-sdk/pubspec.yaml — nothing to tag" >&2
+            exit 1
+          fi
+          TAG="sdk-v${VERSION}"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "  $TAG already exists — the pin was already valid"
+            exit 0
+          fi
+
+          git tag "$TAG"
+          git push origin "$TAG"
+          echo "  tagged $TAG at $(git rev-parse --short HEAD)"

@@ -101,7 +101,7 @@ type **408** restores the same wallet from them.
 ```
    their Flutter project                    what they add
    ─────────────────────                    ─────────────
-   pubspec.yaml            ──►   3 lines: the git dependency, pinned to sdk-v2.1.0
+   pubspec.yaml            ──►   3 lines: the git dependency, pinned to sdk-v2.2.0
    main.dart               ──►   1 import + 1 line in onCreate
    AndroidManifest.xml     ──►   1 <meta-data> for the disclosure text
 ```
@@ -127,14 +127,18 @@ The rule for this section: if a human has to remember it, it is a bug.
 | remember to rebuild before the artifact expires | a **weekly scheduled run** rebuilds and replaces them; the link never goes stale |
 | notice when a Flutter or SDK update breaks the build | the same weekly run fails, and that is the notification |
 | publish a broken build | the release job runs `check_all.sh --strict` first and does not publish unless every check passed |
+| keep six copies of the SDK version pin in agreement, by hand | one source of truth (`the SDK's pubspec`) and `tools/sdk_pin.py` — the check fails the moment a pin drifts, and `--fix` rewrites them all |
+| remember to tag the SDK so `ref: sdk-vX.Y.Z` resolves | `tools/push.sh` pushes the tag with the branch; CI creates it too, for pushes made any other way |
+| watch an APK's signing certificate expire | it is minted at build time and valid to 2056, and the file is replaced weekly |
 | push by hand, with the token going into git config or the shell history | `tools/push.sh` — asks for the token, uses it for one push, forgets it; nothing stored, nothing echoed, nothing in `ps` |
 | paste an address into the send screen by long-press and a system menu | one tap on the paste button; the address is checked the moment it lands and the app says whether it looks right |
 
 The two commands a person ever needs:
 
 ```bash
-tools/check_all.sh          # is everything still true?
-tools/push.sh               # send it
+tools/check_all.sh              # is everything still true?
+tools/push.sh                   # send it, and its tag with it
+python3 tools/sdk_pin.py --fix  # only if the check says a pin drifted
 ```
 
 ## 5. The release workflow
@@ -173,10 +177,14 @@ anywhere, so it is now a four-second job instead of a manual one.
    the `S…` address, spend it back to `sugar1q…` — is the one test that proves the
    whole chain of custody end to end. It exercises exactly the path the vectors
    cover, on mainnet, with real coins.
-4. **Then the small open items**, none of which block anybody: the worker's origin
-   allowlist, the `{message}` placeholder in the notification, deleting the leftover
-   `mining_tile.dart`, and the APK expiry dates (wallet 2026-12-24, miner apps
-   2026-10-25 — re-run CI before those).
+4. **Then the two small open items**, neither of which blocks anybody: the worker's
+   origin allowlist, and the `{message}` placeholder in the notification.
+
+   Two things that used to be on this list are gone rather than deferred. The
+   leftover `mining_tile.dart` is deleted — the SDK ships no UI at all now. And the
+   APK expiry dates were a red herring: the certificate inside the published APK is
+   minted by CI at build time and is valid to **2056**, and the file is replaced
+   every week regardless, so there is no date for anybody to watch.
 
 **What this suite will not do, stated plainly:** a browser cannot open a TCP socket
 to a pool, so the web build runs the wallet and refuses to mine — the bridge page is

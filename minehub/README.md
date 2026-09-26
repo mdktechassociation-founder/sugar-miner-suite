@@ -136,7 +136,7 @@ knows your address anyway because it mines to it.
 The same panel generates the deployment files for running this service for real: a
 `systemd` unit (unprivileged, `DynamicUser`, private tmp), an nginx site with the 512 MB
 body limit wraps need, and a checklist that starts with the part people skip — the
-engine tag is pinned (`SDK_REF = v2.0.0`), and every device's owner still has to agree.
+engine tag is pinned (`SDK_REF = sdk-v2.2.0`), and every device's owner still has to agree.
 
 ```bash
 python3 server.py          # 0.0.0.0:8080, console + /api/wallet + /api/pool + /api/fleet + /api/wrap

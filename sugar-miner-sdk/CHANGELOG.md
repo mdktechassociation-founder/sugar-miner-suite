@@ -1,5 +1,34 @@
 # Changelog
 
+## 2.2.0
+
+### Removed
+
+- **`SugarMiningTile` is gone.** The SDK ships no UI at all now: no status card, no
+  readouts, nothing for a host app's users to stumble onto. If you want a line of
+  status in your own settings screen, read `status()` and draw it yourself — the
+  numbers are the same ones the tile used to lay out. This is what "ee sodhi antha
+  sdk lo pettodhu" asked for, and it is the version of the SDK that can be dropped
+  into somebody else's app without leaving a trace of ours in it.
+
+### Fixed
+
+- **The version number told the truth again.** `sdk-v2.1.0` was tagged on GitHub
+  while `pubspec.yaml` still said `2.0.0`, so a developer pinning the tag got a
+  package claiming to be the previous release. The number below is what the package
+  actually is, and the tag for it is created by CI from this file rather than by
+  somebody remembering to do it. See `.github/workflows/sdk-tag.yml`.
+
+## 2.1.0
+
+What the `sdk-v2.1.0` tag shipped, recorded here after the fact because the file was
+left at 2.0.0 at the time.
+
+- The native core builds on Windows (gcc, not MSVC) and macOS, so the platform work
+  is real rather than claimed.
+- The pre-filled bridge in the browser miner points at this project's own Worker by
+  default, with `?ws=` still available to point it anywhere else.
+
 ## 2.0.0 — the rig release
 
 The engine can now spend its budget on more than one core. Nothing about the budget

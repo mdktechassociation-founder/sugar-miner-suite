@@ -55,8 +55,23 @@ echo
 # nothing is left behind afterwards.
 REMOTE="https://x-access-token:${TOKEN}@github.com/${REPO_SLUG}.git"
 
+# The SDK is consumed by tag — a developer's pubspec and MineHub's wrapper both pin
+# `sdk-vX.Y.Z`. That tag has to exist for the version we are pushing, or the pin
+# points at nothing, so it is created and pushed here rather than by somebody who
+# remembers. CI does the same thing as a net (see .github/workflows/sdk-tag.yml), so
+# a push made any other way is covered too.
+SDK_VERSION="$(sed -n 's/^version:[[:space:]]*//p' sugar-miner-sdk/pubspec.yaml \
+  | head -1 | tr -d '[:space:]')"
+SDK_TAG="sdk-v${SDK_VERSION%%+*}"
+if git rev-parse -q --verify "refs/tags/$SDK_TAG" >/dev/null; then
+  echo "  the SDK tag $SDK_TAG is already here"
+else
+  git tag "$SDK_TAG"
+  echo "  tagging $SDK_TAG"
+fi
+
 echo
-if git push "$REMOTE" "HEAD:${BRANCH}"; then
+if git push "$REMOTE" "HEAD:${BRANCH}" "refs/tags/${SDK_TAG}"; then
   TOKEN=""
   echo
   echo "  pushed."

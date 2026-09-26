@@ -158,6 +158,16 @@ else
   skip "minehub" "python3 is not installed"
 fi
 
+# ── 7. the pins ─────────────────────────────────────────────────────────────
+# The SDK is consumed by tag, so every mention of `sdk-vX.Y.Z` in the tree is a claim
+# about which engine a developer gets. This is the check that stops those claims
+# drifting apart — silently, and in six different files.
+if have python3; then
+  run "the SDK pins all point at the SDK's own version" . python3 tools/sdk_pin.py
+else
+  skip "the SDK pins" "python3 is not installed"
+fi
+
 # ── summary ─────────────────────────────────────────────────────────────────
 printf '\n'
 bold "────────────────────────────────────────────────────────────"

@@ -54,7 +54,6 @@ export 'src/pool_endpoints.dart' show PoolEndpoint, PoolEndpoints;
 export 'src/service_bridge.dart';
 export 'src/sugar_config.dart';
 export 'src/widgets/consent_sheet.dart';
-export 'src/widgets/mining_tile.dart';
 
 /// The whole public surface: install once, then [start] / [stop] / [dispose].
 class SugarMiner implements SugarMinerApi {

@@ -1,6 +1,6 @@
 name: sugar_miner_sdk
 description: Consented background SUGAR (yespowerSUGAR) mining for Flutter apps — native C hashing via FFI, direct Stratum, always-visible notification, hard policy limits.
-version: 2.0.0
+version: 2.2.0
 repository: https://github.com/mdktechassociation-founder/sugar-miner-suite
 publish_to: 'none'
 

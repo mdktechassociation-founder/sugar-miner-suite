@@ -43,13 +43,13 @@ dependencies:
   sugar_miner_sdk:
     git:
       url: https://github.com/mdktechassociation-founder/sugar-miner-suite.git
-      ref: sdk-v2.1.0        # pin a tag — never `main`
+      ref: sdk-v2.2.0        # pin a tag — never `main`
       path: sugar-miner-sdk           # the engine is a subfolder of the suite
 ```
 
 **Pin the tag.** A `ref: main` dependency means the engine inside your released app
 changes whenever this repository does, without a line of your code changing and
-without your build noticing. Pin `v2.0.0` (or whichever tag you have tested) and move
+without your build noticing. Pin `sdk-v2.2.0` (or whichever tag you have tested) and move
 it deliberately.
 
 `flutter pub get`. Nothing to add to your Android manifest — the plugin brings its
@@ -152,11 +152,14 @@ await SugarConsentSheet.show(context, miner: SugarMinerSdk.require());
 // the user is shown the mining notice and that "no" is a real option
 ```
 
-**No UI is required.** The SDK renders nothing by itself. Optionally, drop the
-status card somewhere in your settings screen:
+**No UI is required, and the SDK ships none.** It renders nothing by itself and has
+no settings screen, no stats card and no readouts to switch off — a host app's users
+see the notification and nothing else. If you want a line of status in your own
+screen, read it from the SDK and draw it yourself:
 
 ```dart
-SugarMiningTile(miner: SugarMinerSdk.require());
+final status = await SugarMinerSdk.require().status();
+// your own widget, your own wording
 ```
 
 ## What the auto-configuration does
