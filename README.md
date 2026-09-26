@@ -83,6 +83,14 @@ shows an empty wallet and no error. So the app's import field asks which wallet 
 words came from when the input is a phrase, and both paths are pinned by vectors
 against `bip-utils`.
 
+A one-page version of all of this, with the commands and the evidence, is in
+[`sugar-wallet-miner/WALLET-KEYS.md`](sugar-wallet-miner/WALLET-KEYS.md).
+
+One more thing found while checking it: `importprivkey` in Core calls
+`LearnAllRelatedScripts`, which registers the P2PKH, the P2SH-wrapped segwit **and**
+the native bech32 destination for that one key. So a WIF is not merely mandatory for
+Core — it is sufficient: it covers the `sugar1q…` address this app mines to.
+
 So: "Sugarchain has no seed phrase" is **true of Core** — the original wallet, where
 WIF is mandatory — and **false of the official Android wallet**, which has one and
 uses a path of its own.
