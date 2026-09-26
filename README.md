@@ -30,6 +30,10 @@ stating plainly rather than discovering after an install.
 | **iOS** | ✅ wallet | ⚠️ foreground only | ✅ | iOS **suspends background apps** and has no foreground service. Mining happens only while the app is on screen, the UI says so, and no notification changes that |
 | **Web** | ✅ wallet | ❌ not offered | ✅ compiles | a browser cannot open a TCP socket to a pool and cannot load the native core. The web build runs the wallet and refuses to mine, in one plain sentence. The browser miner in `sugar-miner/` is the web answer, and it uses a WebSocket bridge for exactly this reason |
 
+Every one of those rows says what the platform *can* do. For who checked, and how —
+which builds are only builds, and what has never been run at all —
+see [PLATFORMS.md](PLATFORMS.md), which is kept honest by the same checks.
+
 Three things the engine does on every platform, unchanged: the consented CPU share is
 never exceeded, the daily minute cap still applies, and stopping is final.
 
